@@ -1,6 +1,7 @@
 package com.litert.gateway
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Base64
 import android.util.Log
 import com.google.ai.edge.litertlm.Backend
@@ -14,11 +15,16 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 
 private const val TAG = "LlmEngine"
 
 data class InitResult(val success: Boolean, val error: String? = null)
+
+data class BackendConfig(
+    val text: String = "GPU",
+    val vision: String = "GPU",
+    val audio: String = "CPU"
+)
 
 class LlmEngine {
     private var engine: Engine? = null
@@ -27,7 +33,7 @@ class LlmEngine {
 
     private lateinit var context: Context
 
-    fun initializeWithResult(modelPath: String, context: Context): InitResult {
+    fun initializeWithResult(modelPath: String, context: Context, prefs: SharedPreferences): InitResult {
         this.context = context
         if (isInitialized) {
             return InitResult(true)
@@ -38,11 +44,18 @@ class LlmEngine {
             Log.i(TAG, "Model: ${modelPath.substringAfterLast("/")}")
             Log.i(TAG, "Native library dir: ${context.applicationInfo.nativeLibraryDir}")
 
+            // Get backend configs
+            val textBackend = createBackend(prefs.getString("text_backend", "GPU") ?: "GPU")
+            val visionBackend = createBackend(prefs.getString("vision_backend", "GPU") ?: "GPU")
+            val audioBackend = createBackend(prefs.getString("audio_backend", "CPU") ?: "CPU")
+
+            Log.i(TAG, "Backends - Text: $textBackend, Vision: $visionBackend, Audio: $audioBackend")
+
             val engineConfig = EngineConfig(
                 modelPath = modelPath,
-                backend = Backend.GPU(),
-                visionBackend = Backend.GPU(),
-                audioBackend = Backend.CPU(),
+                backend = textBackend,
+                visionBackend = visionBackend,
+                audioBackend = audioBackend,
                 cacheDir = context.cacheDir.path
             )
 
@@ -57,8 +70,17 @@ class LlmEngine {
         }
     }
 
+    private fun createBackend(name: String): Backend {
+        return when (name.uppercase()) {
+            "CPU" -> Backend.CPU()
+            "GPU" -> Backend.GPU()
+            "NPU" -> Backend.NPU(context.applicationInfo.nativeLibraryDir)
+            else -> Backend.GPU()
+        }
+    }
+
     fun initialize(modelPath: String, context: Context) {
-        initializeWithResult(modelPath, context)
+        initializeWithResult(modelPath, context, context.getSharedPreferences("LiteRTGateway", Context.MODE_PRIVATE))
     }
 
     suspend fun chat(prompt: String, temperature: Double?): String {
@@ -110,7 +132,6 @@ class LlmEngine {
 
         val contentList = mutableListOf<Content>()
 
-        // Add images first, then text
         for (url in imageUrls) {
             try {
                 when {
@@ -154,19 +175,16 @@ class LlmEngine {
     private fun decodeImageUrl(url: String): ByteArray? {
         return when {
             url.startsWith("data:") -> {
-                // Parse base64 data URL: data:image/jpeg;base64,<data>
                 val parts = url.substringAfter("data:").split(";base64,")
                 if (parts.size == 2) {
                     Base64.decode(parts[1], Base64.DEFAULT)
                 } else null
             }
             url.startsWith("http://") || url.startsWith("https://") -> {
-                // Download from URL - not implemented for now
                 Log.w(TAG, "HTTP image URLs not supported yet")
                 null
             }
             else -> {
-                // Treat as file path
                 try {
                     File(url).readBytes()
                 } catch (e: Exception) {

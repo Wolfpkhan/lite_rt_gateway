@@ -8,23 +8,15 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.content.SharedPreferences
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.os.IBinder
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.Spinner
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.documentfile.provider.DocumentFile
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,26 +25,17 @@ class MainActivity : AppCompatActivity() {
 
     private var llmService: LlmService? = null
     private var isBound = false
-    private var selectedModelPath: String = ""
-    private var availableModels: List<File> = emptyList()
     private val logMessages = mutableListOf<String>()
 
-    private val prefs: SharedPreferences by lazy {
-        getSharedPreferences("LiteRTGateway", Context.MODE_PRIVATE)
-    }
+    private val prefs by lazy { getSharedPreferences("LiteRTGateway", Context.MODE_PRIVATE) }
 
     private val statusText by lazy { findViewById<TextView>(R.id.statusText) }
     private val urlText by lazy { findViewById<TextView>(R.id.urlText) }
-    private val modelPathText by lazy { findViewById<TextView>(R.id.modelPathText) }
-    private val modelSpinner by lazy { findViewById<Spinner>(R.id.modelSpinner) }
-    private val defaultFolderButton by lazy { findViewById<Button>(R.id.defaultFolderButton) }
-    private val selectFolderButton by lazy { findViewById<Button>(R.id.selectFolderButton) }
+    private val settingsButton by lazy { findViewById<Button>(R.id.settingsButton) }
     private val startButton by lazy { findViewById<Button>(R.id.startButton) }
     private val stopButton by lazy { findViewById<Button>(R.id.stopButton) }
     private val logText by lazy { findViewById<TextView>(R.id.logText) }
-    private val debugCheckBox by lazy { findViewById<android.widget.CheckBox>(R.id.debugCheckBox) }
     private val clearLogButton by lazy { findViewById<Button>(R.id.clearLogButton) }
-    private val portEditText by lazy { findViewById<android.widget.EditText>(R.id.portEditText) }
 
     private val logReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -68,7 +51,7 @@ class MainActivity : AppCompatActivity() {
             llmService = binder.getService()
             llmService?.logBuffer?.forEach { msg -> appendLog(msg) }
             llmService?.onLog = { msg -> runOnUiThread { appendLog(msg) } }
-            llmService?.debugLog = if (debugCheckBox.isChecked) {
+            llmService?.debugLog = if (prefs.getBoolean("debug_log", false)) {
                 { msg -> runOnUiThread { appendLog(msg) } }
             } else null
             isBound = true
@@ -86,25 +69,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { }
-
-    private val folderPicker = registerForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        uri?.let {
-            // Take persistent permission
-            val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            contentResolver.takePersistableUriPermission(it, takeFlags)
-
-            // Save URI
-            prefs.edit().putString("model_folder_uri", it.toString()).apply()
-
-            appendLog("已选择目录: ${it.lastPathSegment}")
-            scanModels()
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,9 +83,8 @@ class MainActivity : AppCompatActivity() {
 
         requestPermissions()
         setupUI()
-
         updateStatus()
-        appendLog("App started. Select a folder or use default.")
+        appendLog("App started. Click Settings to configure.")
     }
 
     override fun onDestroy() {
@@ -132,7 +97,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
@@ -141,169 +106,33 @@ class MainActivity : AppCompatActivity() {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
-
-        // Check storage permission for Android 11+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                appendLog("需要存储权限才能选择外部目录")
-            }
-        }
     }
 
     private fun setupUI() {
-        defaultFolderButton.setOnClickListener {
-            prefs.edit().remove("model_folder_uri").apply()
-            modelPathText.text = "使用默认目录"
-            scanModels()
-        }
-
-        selectFolderButton.setOnClickListener {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                if (!Environment.isExternalStorageManager()) {
-                    appendLog("请在设置中开启存储权限")
-                    try {
-                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                        intent.data = Uri.parse("package:$packageName")
-                        startActivity(intent)
-                    } catch (e: Exception) {
-                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                        startActivity(intent)
-                    }
-                    return@setOnClickListener
-                }
-            }
-
-            // Show folder selection dialog with common paths
-            val paths = listOf(
-                "/storage/emulated/0/Download" to "Download",
-                "/storage/emulated/0/Documents" to "Documents",
-                "/storage/emulated/0" to "内部存储",
-                "/storage/sdcard1" to "SD卡"
-            ).filter { File(it.first).exists() }
-
-            val names = paths.map { it.second }.toTypedArray()
-
-            android.app.AlertDialog.Builder(this)
-                .setTitle("选择模型目录")
-                .setItems(names) { _, which ->
-                    val selectedPath = paths[which].first
-                    prefs.edit().putString("model_folder_uri", selectedPath).apply()
-                    modelPathText.text = "目录: $selectedPath"
-                    scanModels()
-                }
-                .setNegativeButton("取消", null)
-                .show()
+        settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         startButton.setOnClickListener { startService() }
         stopButton.setOnClickListener { stopService() }
-
-        debugCheckBox.setOnCheckedChangeListener { _, isChecked ->
-            llmService?.debugLog = if (isChecked) {
-                { msg -> runOnUiThread { appendLog(msg) } }
-            } else null
-            appendLog("调试日志: ${if (isChecked) "开启" else "关闭"}")
-        }
 
         clearLogButton.setOnClickListener {
             logMessages.clear()
             logText.text = ""
             appendLog("日志已清除")
         }
-
-        scanModels()
     }
 
-    private fun getModelFolder(): File? {
-        val path = prefs.getString("model_folder_uri", null)
-        if (path == null) {
-            // Default: app's external files directory
-            return getExternalFilesDir(null)?.let { dir ->
-                File(dir, "models").also {
-                    if (!it.exists()) it.mkdirs()
-                }
-            }
-        }
-
-        // User entered path - verify it exists
-        return try {
-            val dir = File(path)
-            if (dir.exists() && dir.isDirectory) {
-                dir
-            } else {
-                appendLog("目录不存在: $path")
-                null
-            }
-        } catch (e: Exception) {
-            appendLog("访问目录失败: ${e.message}")
-            null
-        }
-    }
-
-    private fun scanModels() {
-        val modelDir = getModelFolder()
-        if (modelDir == null || !modelDir.exists()) {
-            modelPathText.text = "未选择目录"
-            return
-        }
-
-        modelPathText.text = "目录: ${modelDir.name}"
-
-        availableModels = try {
-            if (modelDir.isDirectory) {
-                modelDir.listFiles()
-                    ?.filter { file ->
-                        file.extension in listOf("litertlm", "tflite", "gguf") ||
-                        file.name.endsWith(".tflite") || file.name.endsWith(".gguf")
-                    }
-                    ?.sortedBy { it.name }
-                    ?: emptyList()
-            } else {
-                emptyList()
-            }
-        } catch (e: Exception) {
-            appendLog("扫描失败: ${e.message}")
-            emptyList()
-        }
-
-        appendLog("找到 ${availableModels.size} 个模型")
-        availableModels.forEach { f ->
-            appendLog("  - ${f.name} (${f.length() / 1024 / 1024}MB)")
-        }
-
-        // Populate spinner
-        val modelNames = if (availableModels.isEmpty()) {
-            listOf("无模型")
-        } else {
-            availableModels.map { it.name }
-        }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, modelNames)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        modelSpinner.adapter = adapter
-
-        modelSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (availableModels.isNotEmpty() && position < availableModels.size) {
-                    selectedModelPath = availableModels[position].absolutePath
-                } else {
-                    selectedModelPath = ""
-                }
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
-                selectedModelPath = ""
-            }
-        }
-
-        if (availableModels.isNotEmpty()) {
-            selectedModelPath = availableModels[0].absolutePath
-        } else {
-            selectedModelPath = ""
-        }
+    override fun onResume() {
+        super.onResume()
+        updateStatus()
     }
 
     private fun startService() {
-        if (selectedModelPath.isEmpty()) {
-            appendLog("ERROR: No model found")
+        val modelPath = prefs.getString("last_model_path", null)
+        if (modelPath.isNullOrEmpty()) {
+            Toast.makeText(this, "请先在设置中选择模型", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, SettingsActivity::class.java))
             return
         }
 
@@ -313,13 +142,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         appendLog("Starting service...")
-        appendLog("Model: ${File(selectedModelPath).name}")
+        appendLog("Model: ${modelPath.substringAfterLast("/")}")
 
-        val port = portEditText.text.toString().toIntOrNull() ?: 8080
+        val port = prefs.getInt("port", 8080)
         appendLog("Port: $port")
 
         val intent = Intent(this, LlmService::class.java).apply {
-            putExtra("model_path", selectedModelPath)
+            putExtra("model_path", modelPath)
             putExtra("port", port)
         }
 
@@ -346,18 +175,14 @@ class MainActivity : AppCompatActivity() {
             urlText.visibility = View.VISIBLE
             startButton.isEnabled = false
             stopButton.isEnabled = true
-            defaultFolderButton.isEnabled = false
-            selectFolderButton.isEnabled = false
-            modelSpinner.isEnabled = false
+            settingsButton.isEnabled = false
         } else {
             statusText.text = "Stopped"
             statusText.setTextColor(0xFFFF5722.toInt())
             urlText.visibility = View.GONE
-            startButton.isEnabled = availableModels.isNotEmpty()
+            startButton.isEnabled = true
             stopButton.isEnabled = false
-            defaultFolderButton.isEnabled = true
-            selectFolderButton.isEnabled = true
-            modelSpinner.isEnabled = true
+            settingsButton.isEnabled = true
         }
     }
 

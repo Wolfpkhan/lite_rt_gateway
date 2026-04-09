@@ -83,7 +83,7 @@ class LlmService : Service() {
         log("Loading model: ${modelPath.substringAfterLast("/")}")
         updateNotification("Loading model...")
 
-        val loadResult = llmEngine.initializeWithResult(modelPath, applicationContext)
+        val loadResult = llmEngine.initializeWithResult(modelPath, applicationContext, getSharedPreferences("LiteRTGateway", MODE_PRIVATE))
 
         if (!loadResult.success) {
             log("ERROR: ${loadResult.error}")

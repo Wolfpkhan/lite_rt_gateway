@@ -5,7 +5,7 @@
     android:orientation="vertical"
     android:padding="12dp">
 
-    <!-- 紧凑顶部区域 -->
+    <!-- 顶部区域 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -24,11 +24,21 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="设置"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Status: "
-            android:textSize="12sp" />
+            android:textSize="12sp"
+            android:layout_marginStart="8dp" />
 
         <TextView
             android:id="@+id/statusText"
@@ -38,50 +48,6 @@
             android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
-
-    <!-- 模型目录选择区域 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="8dp">
-
-        <Button
-            android:id="@+id/defaultFolderButton"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:text="默认目录"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/selectFolderButton"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:text="选择目录"
-            android:textSize="12sp"
-            android:layout_marginStart="8dp" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/modelPathText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="10sp"
-        android:textColor="#888888"
-        android:layout_marginTop="2dp"
-        android:maxLines="1"
-        android:ellipsize="middle" />
-
-    <!-- 模型选择 -->
-    <Spinner
-        android:id="@+id/modelSpinner"
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="4dp"
-        android:background="@android:drawable/btn_dropdown" />
 
     <!-- URL显示 -->
     <TextView
@@ -93,64 +59,7 @@
         android:layout_marginTop="4dp"
         android:visibility="gone" />
 
-    <!-- 端口配置 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="4dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="端口:"
-            android:textSize="12sp" />
-
-        <EditText
-            android:id="@+id/portEditText"
-            android:layout_width="80dp"
-            android:layout_height="36dp"
-            android:layout_marginStart="8dp"
-            android:text="8080"
-            android:textSize="12sp"
-            android:inputType="number"
-            android:maxLength="5"
-            android:background="@android:drawable/edit_text" />
-    </LinearLayout>
-
-    <!-- 调试开关 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="4dp">
-
-        <CheckBox
-            android:id="@+id/debugCheckBox"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="调试日志"
-            android:textSize="12sp"
-            android:checked="false" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <Button
-            android:id="@+id/clearLogButton"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:text="Clear"
-            android:textSize="12sp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp" />
-    </LinearLayout>
-
-    <!-- 按钮区域 - 横向排列 -->
+    <!-- 按钮区域 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -174,14 +83,32 @@
             android:layout_marginStart="16dp" />
     </LinearLayout>
 
-    <!-- 日志区域 - 占据主要空间 -->
+    <!-- 清空按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:layout_marginTop="4dp">
+
+        <Button
+            android:id="@+id/clearLogButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Clear"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
+    </LinearLayout>
+
+    <!-- 日志区域 -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Log:"
         android:textSize="12sp"
         android:textStyle="bold"
-        android:layout_marginTop="12dp" />
+        android:layout_marginTop="8dp" />
 
     <ScrollView
         android:id="@+id/logScrollView"
