@@ -2,6 +2,8 @@ package com.litert.gateway.openai
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonArray
 
 @Serializable
 data class OpenAIRequest(
@@ -18,7 +20,20 @@ data class OpenAIRequest(
 @Serializable
 data class Message(
     val role: String,
-    val content: String
+    val content: String? = null
+)
+
+@Serializable
+data class ImageUrlContent(
+    val url: String
+)
+
+@Serializable
+data class ContentPart(
+    val type: String,
+    val text: String? = null,
+    @SerialName("image_url")
+    val imageUrl: ImageUrlContent? = null
 )
 
 @Serializable
@@ -54,9 +69,15 @@ data class StreamChunk(
 
 @Serializable
 data class StreamChoice(
-    val delta: Message,
+    val delta: StreamDelta,
     @SerialName("finish_reason")
     val finishReason: String? = null
+)
+
+@Serializable
+data class StreamDelta(
+    val role: String,
+    val content: String = ""
 )
 
 @Serializable
