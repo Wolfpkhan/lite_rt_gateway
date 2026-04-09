@@ -9,10 +9,15 @@ import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Message as LiteRTMessage
+import com.litert.gateway.openai.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -30,6 +35,7 @@ class LlmEngine {
     private var engine: Engine? = null
     private var isInitialized = false
     private val cacheDir: File by lazy { File(context.cacheDir, "vision_images").also { it.mkdirs() } }
+    private val inferenceMutex = Mutex()  // Mutex for thread-safe inference
 
     private lateinit var context: Context
 
@@ -106,6 +112,51 @@ class LlmEngine {
         }
     }
 
+    /**
+     * Chat with full OpenAI message history (stateless, thread-safe)
+     * Each request includes the complete conversation history as messages array
+     */
+    suspend fun chatWithMessages(
+        messages: List<Message>,
+        temperature: Double?
+    ): String = withContext(Dispatchers.IO) {
+        inferenceMutex.withLock {  // Thread-safe: serialize concurrent requests
+            val e = engine ?: return@withContext "Error: Engine not initialized"
+            try {
+                // Convert OpenAI format messages to LiteRT format, excluding the last message
+                val initialMessages = messages.dropLast(1).map { msg ->
+                    when (msg.role) {
+                        "user" -> LiteRTMessage.user(msg.content ?: "")
+                        "assistant" -> LiteRTMessage.model(msg.content ?: "")
+                        "system" -> LiteRTMessage.user(msg.content ?: "")  // system as user
+                        else -> LiteRTMessage.user(msg.content ?: "")
+                    }
+                }
+
+                // Parse the last message for content and media
+                val lastMessage = messages.lastOrNull()
+                val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
+
+                // Build config with conversation history
+                val config = ConversationConfig(
+                    initialMessages = initialMessages
+                )
+
+                // Build contents for the new message
+                val contents = buildContents(textContent, mediaUrls)
+
+                // Create new conversation with history and send the latest message
+                e.createConversation(config).use { conversation ->
+                    val result = conversation.sendMessage(contents)
+                    result.toString()
+                }
+            } catch (ex: Exception) {
+                Log.e(TAG, "Inference failed: ${ex.message}", ex)
+                "Error: ${ex.message}"
+            }
+        }
+    }
+
     fun chatStreamMultiModal(text: String, imageUrls: List<String>, temperature: Double?): Flow<String> = flow {
         val e = engine ?: run {
             emit("Error: Engine not initialized")
@@ -122,6 +173,56 @@ class LlmEngine {
         } catch (ex: Exception) {
             Log.e(TAG, "Stream inference failed: ${ex.message}", ex)
             emit("Error: ${ex.message}")
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
+     * Streaming chat with full OpenAI message history (stateless, thread-safe)
+     * Each request includes the complete conversation history as messages array
+     */
+    fun chatStreamWithMessages(
+        messages: List<Message>,
+        temperature: Double?
+    ): Flow<String> = flow {
+        inferenceMutex.withLock {  // Thread-safe: serialize concurrent requests
+            val e = engine ?: run {
+                emit("Error: Engine not initialized")
+                return@flow
+            }
+
+            try {
+                // Convert OpenAI format messages to LiteRT format, excluding the last message
+                val initialMessages = messages.dropLast(1).map { msg ->
+                    when (msg.role) {
+                        "user" -> LiteRTMessage.user(msg.content ?: "")
+                        "assistant" -> LiteRTMessage.model(msg.content ?: "")
+                        "system" -> LiteRTMessage.user(msg.content ?: "")  // system as user
+                        else -> LiteRTMessage.user(msg.content ?: "")
+                    }
+                }
+
+                // Parse the last message for content and media
+                val lastMessage = messages.lastOrNull()
+                val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
+
+                // Build config with conversation history
+                val config = ConversationConfig(
+                    initialMessages = initialMessages
+                )
+
+                // Build contents for the new message
+                val contents = buildContents(textContent, mediaUrls)
+
+                // Create new conversation with history and stream the response
+                e.createConversation(config).use { conversation ->
+                    conversation.sendMessageAsync(contents).collect { msg ->
+                        emit(msg.toString())
+                    }
+                }
+            } catch (ex: Exception) {
+                Log.e(TAG, "Stream inference failed: ${ex.message}", ex)
+                emit("Error: ${ex.message}")
+            }
         }
     }.flowOn(Dispatchers.IO)
 
@@ -193,6 +294,20 @@ class LlmEngine {
                 }
             }
         }
+    }
+
+    /**
+     * Parse OpenAI Message to extract text content and media URLs
+     * Handles both simple string content and multi-modal content arrays
+     */
+    private fun parseOpenAIMessage(message: Message?): Pair<String, List<String>> {
+        if (message == null) return Pair("", emptyList())
+
+        val content = message.content ?: return Pair("", emptyList())
+
+        // For now, assume content is a plain string
+        // TODO: Support multi-modal content arrays if needed
+        return Pair(content, emptyList())
     }
 
     fun isReady(): Boolean = isInitialized && engine != null

@@ -25,27 +25,31 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
 
         try {
             val json = Json.parseToJsonElement(jsonBody)
-            val messages = json.jsonObject["messages"]?.jsonArray
-            val lastMessage = messages?.lastOrNull()?.jsonObject
+            val messagesJson = json.jsonObject["messages"]?.jsonArray
 
-            if (lastMessage == null) {
+            if (messagesJson == null) {
                 call.respond(HttpStatusCode.BadRequest, "No messages provided")
                 return@post
             }
 
-            val (textContent, mediaUrls) = parseMessageContent(lastMessage)
-            if (textContent.isEmpty() && mediaUrls.isEmpty()) {
-                call.respond(HttpStatusCode.BadRequest, "No content in message")
+            // Deserialize the complete messages array
+            val messages = messagesJson.map { msgJson ->
+                val msgObj = msgJson.jsonObject
+                Message(
+                    role = msgObj["role"]?.jsonPrimitive?.content ?: "user",
+                    content = msgObj["content"]?.jsonPrimitive?.content
+                )
+            }
+
+            if (messages.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, "Messages array is empty")
                 return@post
             }
 
             val stream = json.jsonObject["stream"]?.jsonPrimitive?.booleanOrNull ?: false
             val temperature = json.jsonObject["temperature"]?.jsonPrimitive?.doubleOrNull
 
-            onDebug?.invoke(">>> Model Input: $textContent")
-            if (mediaUrls.isNotEmpty()) {
-                onDebug?.invoke(">>> Media: ${mediaUrls.size}")
-            }
+            onDebug?.invoke(">>> Request with ${messages.size} messages")
 
             if (stream) {
                 call.respondOutputStream(
@@ -55,7 +59,7 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     val outputStream = this
                     val id = "litert-${System.currentTimeMillis()}"
 
-                    llmEngine.chatStreamMultiModal(textContent, mediaUrls, temperature).collect { chunk ->
+                    llmEngine.chatStreamWithMessages(messages, temperature).collect { chunk ->
                         onDebug?.invoke("<<< Stream: $chunk")
                         val jsonStr = Json.encodeToString(
                             StreamChunk.serializer(),
@@ -87,7 +91,8 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     outputStream.flush()
                 }
             } else {
-                val result = llmEngine.chatMultiModal(textContent, mediaUrls, temperature)
+                // Use the new chatWithMessages method with full history
+                val result = llmEngine.chatWithMessages(messages, temperature)
                 onDebug?.invoke("<<< Model Output: $result")
 
                 val choicesArray = buildJsonArray {
@@ -100,9 +105,11 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     })
                 }
                 val usageObj = buildJsonObject {
-                    put("prompt_tokens", textContent.length / 4)
+                    // Estimate token count based on all messages
+                    val totalInputChars = messages.sumOf { it.content?.length ?: 0 }
+                    put("prompt_tokens", totalInputChars / 4)
                     put("completion_tokens", result.length / 4)
-                    put("total_tokens", (textContent.length + result.length) / 4)
+                    put("total_tokens", (totalInputChars + result.length) / 4)
                 }
                 val response = buildJsonObject {
                     put("id", "litert-${System.currentTimeMillis()}")
