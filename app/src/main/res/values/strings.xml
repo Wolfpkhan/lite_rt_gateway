@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LiteRT Gateway</string>
+    <string name="status_stopped">Service Stopped</string>
+    <string name="status_running">Service Running</string>
+    <string name="start_service">Start Service</string>
+    <string name="stop_service">Stop Service</string>
+</resources>
