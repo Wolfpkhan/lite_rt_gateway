@@ -9,8 +9,6 @@ import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
-import com.google.ai.edge.litertlm.ConversationConfig
-import com.google.ai.edge.litertlm.Message as LiteRTMessage
 import com.litert.gateway.openai.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -114,7 +112,7 @@ class LlmEngine {
 
     /**
      * Chat with full OpenAI message history (stateless, thread-safe)
-     * Each request includes the complete conversation history as messages array
+     * For now, processes the last message only (conversation history not supported by base API)
      */
     suspend fun chatWithMessages(
         messages: List<Message>,
@@ -123,30 +121,15 @@ class LlmEngine {
         inferenceMutex.withLock {  // Thread-safe: serialize concurrent requests
             val e = engine ?: return@withContext "Error: Engine not initialized"
             try {
-                // Convert OpenAI format messages to LiteRT format, excluding the last message
-                val initialMessages = messages.dropLast(1).map { msg ->
-                    when (msg.role) {
-                        "user" -> LiteRTMessage.user(msg.content ?: "")
-                        "assistant" -> LiteRTMessage.model(msg.content ?: "")
-                        "system" -> LiteRTMessage.user(msg.content ?: "")  // system as user
-                        else -> LiteRTMessage.user(msg.content ?: "")
-                    }
-                }
-
                 // Parse the last message for content and media
                 val lastMessage = messages.lastOrNull()
                 val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
 
-                // Build config with conversation history
-                val config = ConversationConfig(
-                    initialMessages = initialMessages
-                )
-
                 // Build contents for the new message
                 val contents = buildContents(textContent, mediaUrls)
 
-                // Create new conversation with history and send the latest message
-                e.createConversation(config).use { conversation ->
+                // Create conversation and send message
+                e.createConversation().use { conversation ->
                     val result = conversation.sendMessage(contents)
                     result.toString()
                 }
@@ -178,7 +161,7 @@ class LlmEngine {
 
     /**
      * Streaming chat with full OpenAI message history (stateless, thread-safe)
-     * Each request includes the complete conversation history as messages array
+     * For now, processes the last message only (conversation history not supported by base API)
      */
     fun chatStreamWithMessages(
         messages: List<Message>,
@@ -191,30 +174,15 @@ class LlmEngine {
             }
 
             try {
-                // Convert OpenAI format messages to LiteRT format, excluding the last message
-                val initialMessages = messages.dropLast(1).map { msg ->
-                    when (msg.role) {
-                        "user" -> LiteRTMessage.user(msg.content ?: "")
-                        "assistant" -> LiteRTMessage.model(msg.content ?: "")
-                        "system" -> LiteRTMessage.user(msg.content ?: "")  // system as user
-                        else -> LiteRTMessage.user(msg.content ?: "")
-                    }
-                }
-
                 // Parse the last message for content and media
                 val lastMessage = messages.lastOrNull()
                 val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
 
-                // Build config with conversation history
-                val config = ConversationConfig(
-                    initialMessages = initialMessages
-                )
-
                 // Build contents for the new message
                 val contents = buildContents(textContent, mediaUrls)
 
-                // Create new conversation with history and stream the response
-                e.createConversation(config).use { conversation ->
+                // Create conversation and stream response
+                e.createConversation().use { conversation ->
                     conversation.sendMessageAsync(contents).collect { msg ->
                         emit(msg.toString())
                     }
