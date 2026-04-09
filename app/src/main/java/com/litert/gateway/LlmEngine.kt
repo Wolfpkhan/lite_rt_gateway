@@ -42,6 +42,7 @@ class LlmEngine {
                 modelPath = modelPath,
                 backend = Backend.GPU(),
                 visionBackend = Backend.GPU(),
+                audioBackend = Backend.CPU(),
                 cacheDir = context.cacheDir.path
             )
 
@@ -112,12 +113,22 @@ class LlmEngine {
         // Add images first, then text
         for (url in imageUrls) {
             try {
-                val imageBytes = decodeImageUrl(url)
-                if (imageBytes != null) {
-                    contentList.add(Content.ImageBytes(imageBytes))
+                when {
+                    url.startsWith("data:image") -> {
+                        val imageBytes = decodeImageUrl(url)
+                        if (imageBytes != null) {
+                            contentList.add(Content.ImageBytes(imageBytes))
+                        }
+                    }
+                    url.startsWith("data:audio") -> {
+                        val audioBytes = decodeAudioUrl(url)
+                        if (audioBytes != null) {
+                            contentList.add(Content.AudioBytes(audioBytes))
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to decode image: ${e.message}")
+                Log.e(TAG, "Failed to decode media: ${e.message}")
             }
         }
 
@@ -126,6 +137,18 @@ class LlmEngine {
         }
 
         return Contents.of(contentList)
+    }
+
+    private fun decodeAudioUrl(url: String): ByteArray? {
+        return try {
+            val parts = url.substringAfter("data:").split(";base64,")
+            if (parts.size == 2) {
+                Base64.decode(parts[1], Base64.DEFAULT)
+            } else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to decode audio: ${e.message}")
+            null
+        }
     }
 
     private fun decodeImageUrl(url: String): ByteArray? {

@@ -33,8 +33,8 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                 return@post
             }
 
-            val (textContent, imageUrls) = parseMessageContent(lastMessage)
-            if (textContent.isEmpty() && imageUrls.isEmpty()) {
+            val (textContent, mediaUrls) = parseMessageContent(lastMessage)
+            if (textContent.isEmpty() && mediaUrls.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, "No content in message")
                 return@post
             }
@@ -43,8 +43,8 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
             val temperature = json.jsonObject["temperature"]?.jsonPrimitive?.doubleOrNull
 
             onDebug?.invoke(">>> Model Input: $textContent")
-            if (imageUrls.isNotEmpty()) {
-                onDebug?.invoke(">>> Images: ${imageUrls.size}")
+            if (mediaUrls.isNotEmpty()) {
+                onDebug?.invoke(">>> Media: ${mediaUrls.size}")
             }
 
             if (stream) {
@@ -55,7 +55,7 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     val outputStream = this
                     val id = "litert-${System.currentTimeMillis()}"
 
-                    llmEngine.chatStreamMultiModal(textContent, imageUrls, temperature).collect { chunk ->
+                    llmEngine.chatStreamMultiModal(textContent, mediaUrls, temperature).collect { chunk ->
                         onDebug?.invoke("<<< Stream: $chunk")
                         val jsonStr = Json.encodeToString(
                             StreamChunk.serializer(),
@@ -87,7 +87,7 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     outputStream.flush()
                 }
             } else {
-                val result = llmEngine.chatMultiModal(textContent, imageUrls, temperature)
+                val result = llmEngine.chatMultiModal(textContent, mediaUrls, temperature)
                 onDebug?.invoke("<<< Model Output: $result")
 
                 val choicesArray = buildJsonArray {
@@ -122,7 +122,7 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
 
 private fun parseMessageContent(message: JsonObject): Pair<String, List<String>> {
     val textBuilder = StringBuilder()
-    val imageUrls = mutableListOf<String>()
+    val mediaUrls = mutableListOf<String>()
 
     val content = message["content"]
 
@@ -139,7 +139,11 @@ private fun parseMessageContent(message: JsonObject): Pair<String, List<String>>
                     "text" -> textBuilder.append(obj["text"]?.jsonPrimitive?.content ?: "")
                     "image_url" -> {
                         val url = obj["image_url"]?.jsonObject?.get("url")?.jsonPrimitive?.content
-                        if (url != null) imageUrls.add(url)
+                        if (url != null) mediaUrls.add(url)
+                    }
+                    "audio" -> {
+                        val url = obj["audio"]?.jsonObject?.get("url")?.jsonPrimitive?.content
+                        if (url != null) mediaUrls.add(url)
                     }
                 }
             }
@@ -149,7 +153,7 @@ private fun parseMessageContent(message: JsonObject): Pair<String, List<String>>
         }
     }
 
-    return Pair(textBuilder.toString(), imageUrls)
+    return Pair(textBuilder.toString(), mediaUrls)
 }
 
 fun Route.modelsRoute() {
