@@ -41,28 +41,23 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                 val content = when (val contentVal = msgObj["content"]) {
                     is JsonPrimitive -> contentVal.content
                     is JsonArray -> {
-                        // Multi-modal content: extract text and image URLs
+                        // Multi-modal content: extract text, image URLs, and audio URLs
                         val textParts = mutableListOf<String>()
                         val imageUrls = mutableListOf<String>()
+                        val audioUrls = mutableListOf<String>()
                         contentVal.forEach { item ->
                             val obj = item.jsonObject
                             when (obj["type"]?.jsonPrimitive?.content) {
                                 "text" -> obj["text"]?.jsonPrimitive?.content?.let { textParts.add(it) }
                                 "image_url" -> obj["image_url"]?.jsonObject?.get("url")?.jsonPrimitive?.content?.let { imageUrls.add(it) }
+                                "audio" -> obj["audio"]?.jsonObject?.get("url")?.jsonPrimitive?.content?.let { audioUrls.add(it) }
                             }
                         }
-                        // Store image URLs in a special field or encode them
-                        if (imageUrls.isNotEmpty()) {
-                            // For now, return text with image URL indicator
-                            val imageIndicator = imageUrls.joinToString("; ") { "[image: $it]" }
-                            if (textParts.isNotEmpty()) {
-                                "${textParts.joinToString(" ")}\n$imageIndicator"
-                            } else {
-                                imageIndicator
-                            }
-                        } else {
-                            textParts.joinToString(" ")
-                        }
+                        val parts = mutableListOf<String>()
+                        if (textParts.isNotEmpty()) parts.add(textParts.joinToString(" "))
+                        if (imageUrls.isNotEmpty()) parts.add(imageUrls.joinToString("; ") { "[image: $it]" })
+                        if (audioUrls.isNotEmpty()) parts.add(audioUrls.joinToString("; ") { "[audio: $it]" })
+                        parts.joinToString("\n").ifEmpty { null }
                     }
                     else -> null
                 }
