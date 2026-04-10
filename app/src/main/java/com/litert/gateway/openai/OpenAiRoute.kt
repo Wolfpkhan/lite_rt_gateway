@@ -51,6 +51,11 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
 
             onDebug?.invoke(">>> Request with ${messages.size} messages")
 
+            // Calculate input size for logging
+            val totalInputChars = messages.sumOf { it.content?.length ?: 0 }
+            val inputTokens = totalInputChars / 4
+            onDebug?.invoke(">>> Input size: ~$inputTokens tokens")
+
             if (stream) {
                 call.respondOutputStream(
                     ContentType.Text.EventStream,
@@ -93,6 +98,10 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
             } else {
                 // Use the new chatWithMessages method with full history
                 val result = llmEngine.chatWithMessages(messages, temperature)
+
+                // Calculate output size for logging
+                val outputTokens = result.length / 4
+                onDebug?.invoke(">>> Input: ~$inputTokens tokens, Output: ~$outputTokens tokens")
                 onDebug?.invoke("<<< Model Output: $result")
 
                 val choicesArray = buildJsonArray {
@@ -105,11 +114,9 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     })
                 }
                 val usageObj = buildJsonObject {
-                    // Estimate token count based on all messages
-                    val totalInputChars = messages.sumOf { it.content?.length ?: 0 }
-                    put("prompt_tokens", totalInputChars / 4)
-                    put("completion_tokens", result.length / 4)
-                    put("total_tokens", (totalInputChars + result.length) / 4)
+                    put("prompt_tokens", inputTokens)
+                    put("completion_tokens", outputTokens)
+                    put("total_tokens", inputTokens + outputTokens)
                 }
                 val response = buildJsonObject {
                     put("id", "litert-${System.currentTimeMillis()}")
