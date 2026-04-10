@@ -24,6 +24,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.MessageDigest
 
 private const val TAG = "LlmEngine"
 
@@ -40,6 +41,17 @@ data class BackendConfig(
     val vision: String = "GPU",
     val audio: String = "CPU"
 )
+
+// Session info for LRU cache
+private data class SessionInfo(
+    val session: com.google.ai.edge.litertlm.Conversation,
+    val lastAccessTime: Long,
+    val lastMessageCount: Int
+)
+
+// LRU Cache constants
+private const val MAX_ACTIVE_SESSIONS = 5
+private const val IDLE_TIMEOUT_MS = 10 * 60 * 1000L  // 10 minutes
 
 class LlmEngine {
     private var engine: Engine? = null
@@ -70,6 +82,114 @@ class LlmEngine {
             // This is not called when automaticToolCalling = false
             return """{"error": "Tool execution should be done by caller"}"""
         }
+    }
+
+    // LRU Session Cache
+    private val sessionCache = object : LinkedHashMap<String, SessionInfo>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SessionInfo>?): Boolean {
+            val oldest = eldest?.value ?: return false
+            // Keep at least 1 session, evict if: too many sessions OR idle timeout
+            if (size <= 1) return false
+            return size > MAX_ACTIVE_SESSIONS ||
+                   System.currentTimeMillis() - oldest.lastAccessTime > IDLE_TIMEOUT_MS
+        }
+    }
+
+    /**
+     * Generate session ID from system prompt MD5
+     */
+    private fun getSessionId(messages: List<Message>): String {
+        val systemPrompt = messages
+            .filter { it.role.equals("system", ignoreCase = true) }
+            .joinToString("\n") { it.content ?: "" }
+        return if (systemPrompt.isEmpty()) {
+            "stateless-${System.currentTimeMillis()}"
+        } else {
+            systemPrompt.md5()
+        }
+    }
+
+    /**
+     * MD5 hash of a string
+     */
+    private fun String.md5(): String {
+        val md = MessageDigest.getInstance("MD5")
+        val digest = md.digest(this.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * Get or create a cached conversation session
+     */
+    private fun getOrCreateSession(
+        messages: List<Message>,
+        temperature: Double?,
+        tools: List<OpenAITool>?
+    ): com.google.ai.edge.litertlm.Conversation {
+        val e = engine ?: throw IllegalStateException("Engine not initialized")
+        val sessionId = getSessionId(messages)
+
+        // Check active sessions
+        if (sessionCache.containsKey(sessionId)) {
+            val info = sessionCache[sessionId]!!
+            // Update access time
+            sessionCache[sessionId] = info.copy(lastAccessTime = System.currentTimeMillis())
+            Log.i(TAG, "Session cache HIT: $sessionId")
+            return info.session
+        }
+
+        // Clean up stale sessions before creating new one
+        cleanupStaleSessions()
+
+        // Create new session
+        Log.i(TAG, "Session cache MISS: $sessionId, creating new")
+        val nonSystemMessages = messages.filter { !it.role.equals("system", ignoreCase = true) }
+
+        // Use buildConversationConfig to create config with full history
+        val conversationConfig = buildConversationConfig(nonSystemMessages, temperature, tools)
+
+        val conversation = e.createConversation(conversationConfig)
+        sessionCache[sessionId] = SessionInfo(
+            session = conversation,
+            lastAccessTime = System.currentTimeMillis(),
+            lastMessageCount = nonSystemMessages.size
+        )
+
+        return conversation
+    }
+
+    /**
+     * Clean up stale sessions that have timed out
+     */
+    private fun cleanupStaleSessions() {
+        val now = System.currentTimeMillis()
+        val toRemove = sessionCache.filter { (_, info) ->
+            now - info.lastAccessTime > IDLE_TIMEOUT_MS
+        }
+        toRemove.forEach { (id, info) ->
+            try {
+                info.session.close()
+                Log.i(TAG, "Closed stale session: $id")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to close session: $id: ${e.message}")
+            }
+            sessionCache.remove(id)
+        }
+    }
+
+    /**
+     * Close all cached sessions
+     */
+    fun closeAllSessions() {
+        sessionCache.values.forEach { info ->
+            try {
+                info.session.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to close session: ${e.message}")
+            }
+        }
+        sessionCache.clear()
+        Log.i(TAG, "All sessions closed")
     }
 
     private var defaultTemperature: Float = 0.8f
@@ -168,41 +288,28 @@ class LlmEngine {
         tools: List<OpenAITool>? = null
     ): ChatResult = withContext(Dispatchers.IO) {
         inferenceMutex.withLock {
-            val e = engine ?: return@withContext ChatResult(text = "Error: Engine not initialized")
             try {
-                // Build conversation config with full history
-                val conversationConfig = buildConversationConfig(messages, temperature, tools)
+                // Get or create cached session (handles history internally)
+                val conversation = getOrCreateSession(messages, temperature, tools)
 
-                // The last message is the new input
+                // Send only the last message (history is cached)
                 val lastMessage = messages.lastOrNull()
+                    ?: return@withContext ChatResult(text = "Error: No message")
                 val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
                 val contents = buildContents(textContent, mediaUrls)
 
-                // Create conversation with history and send message
-                e.createConversation(conversationConfig).use { conversation ->
-                    try {
-                        val result = conversation.sendMessage(contents)
-                        val toolCalls = result.toolCalls
-                        Log.i(TAG, "sendMessage completed. toolCalls: $toolCalls, toolCalls size: ${toolCalls?.size}")
-                        // If model returned tool calls, use them
-                        if (!toolCalls.isNullOrEmpty()) {
-                            ChatResult(
-                                text = result.toString(),
-                                toolCalls = toolCalls
-                            )
-                        } else {
-                            // No tool calls, return as regular text
-                            ChatResult(
-                                text = result.toString(),
-                                toolCalls = null
-                            )
-                        }
-                    } catch (parseEx: Exception) {
-                        // Tool call parsing failed - model returned malformed tool call text
-                        Log.w(TAG, "Tool call parsing failed: ${parseEx.message}")
-                        ChatResult(text = "Error: ${parseEx.message}")
-                    }
+                val result = conversation.sendMessage(contents)
+                val toolCalls = result.toolCalls
+                Log.i(TAG, "sendMessage completed. toolCalls: $toolCalls, toolCalls size: ${toolCalls?.size}")
+
+                if (!toolCalls.isNullOrEmpty()) {
+                    ChatResult(text = result.toString(), toolCalls = toolCalls)
+                } else {
+                    ChatResult(text = result.toString(), toolCalls = null)
                 }
+            } catch (parseEx: Exception) {
+                Log.w(TAG, "Tool call parsing failed: ${parseEx.message}")
+                ChatResult(text = "Error: ${parseEx.message}")
             } catch (ex: Exception) {
                 Log.e(TAG, "Inference failed: ${ex.message}", ex)
                 ChatResult(text = "Error: ${ex.message}")
@@ -240,25 +347,22 @@ class LlmEngine {
         tools: List<OpenAITool>? = null
     ): Flow<String> = flow {
         inferenceMutex.withLock {
-            val e = engine ?: run {
-                emit("Error: Engine not initialized")
-                return@flow
-            }
-
             try {
-                // Build conversation config with full history
-                val conversationConfig = buildConversationConfig(messages, temperature, tools)
+                // Get or create cached session
+                val conversation = getOrCreateSession(messages, temperature, tools)
 
-                // The last message is the new input
+                // Send only the last message (history is cached)
                 val lastMessage = messages.lastOrNull()
+                    ?: run {
+                        emit("Error: No message")
+                        return@flow
+                    }
                 val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
                 val contents = buildContents(textContent, mediaUrls)
 
-                // Create conversation with history and stream response
-                e.createConversation(conversationConfig).use { conversation ->
-                    conversation.sendMessageAsync(contents).collect { msg ->
-                        emit(msg.toString())
-                    }
+                // Stream response
+                conversation.sendMessageAsync(contents).collect { msg ->
+                    emit(msg.toString())
                 }
             } catch (ex: Exception) {
                 Log.e(TAG, "Stream inference failed: ${ex.message}", ex)
@@ -444,6 +548,7 @@ class LlmEngine {
     fun isReady(): Boolean = isInitialized && engine != null
 
     fun close() {
+        closeAllSessions()
         try {
             engine?.close()
         } catch (e: Exception) {
