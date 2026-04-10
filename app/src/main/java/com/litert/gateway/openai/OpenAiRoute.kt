@@ -32,12 +32,30 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                 return@post
             }
 
-            // Deserialize the complete messages array
+            // Deserialize the complete messages array (including tool_calls)
             val messages = messagesJson.map { msgJson ->
                 val msgObj = msgJson.jsonObject
+                val role = msgObj["role"]?.jsonPrimitive?.content ?: "user"
+                val content = msgObj["content"]?.jsonPrimitive?.content
+
+                // Parse tool_calls if present
+                val toolCalls = msgObj["tool_calls"]?.jsonArray?.map { tcJson ->
+                    val tcObj = tcJson.jsonObject
+                    ToolCall(
+                        id = tcObj["id"]?.jsonPrimitive?.content ?: "call_${System.currentTimeMillis()}",
+                        type = tcObj["type"]?.jsonPrimitive?.content ?: "function",
+                        function = FunctionCall(
+                            name = tcObj["function"]?.jsonObject?.get("name")?.jsonPrimitive?.content ?: "",
+                            arguments = tcObj["function"]?.jsonObject?.get("arguments")?.jsonPrimitive?.content ?: "{}"
+                        )
+                    )
+                }
+
                 Message(
-                    role = msgObj["role"]?.jsonPrimitive?.content ?: "user",
-                    content = msgObj["content"]?.jsonPrimitive?.content
+                    role = role,
+                    content = content,
+                    toolCalls = toolCalls,
+                    toolCallId = msgObj["tool_call_id"]?.jsonPrimitive?.content
                 )
             }
 
@@ -46,10 +64,27 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                 return@post
             }
 
+            // Parse tools from request
+            val toolsJson = json.jsonObject["tools"]?.jsonArray
+            val tools = toolsJson?.mapNotNull { toolJson ->
+                val toolObj = toolJson.jsonObject
+                val functionObj = toolObj["function"]?.jsonObject
+                if (functionObj != null) {
+                    Tool(
+                        type = "function",
+                        function = FunctionDefinition(
+                            name = functionObj["name"]?.jsonPrimitive?.content ?: return@mapNotNull null,
+                            description = functionObj["description"]?.jsonPrimitive?.content ?: "",
+                            parameters = functionObj["parameters"]
+                        )
+                    )
+                } else null
+            }
+
             val stream = json.jsonObject["stream"]?.jsonPrimitive?.booleanOrNull ?: false
             val temperature = json.jsonObject["temperature"]?.jsonPrimitive?.doubleOrNull
 
-            onDebug?.invoke(">>> Request with ${messages.size} messages")
+            onDebug?.invoke(">>> Request with ${messages.size} messages, tools: ${tools?.size ?: 0}")
 
             // Calculate input size for logging
             val totalInputChars = messages.sumOf { msg ->
@@ -66,7 +101,7 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     val outputStream = this
                     val id = "litert-${System.currentTimeMillis()}"
 
-                    llmEngine.chatStreamWithMessages(messages, temperature).collect { chunk ->
+                    llmEngine.chatStreamWithMessages(messages, temperature, tools).collect { chunk ->
                         onDebug?.invoke("<<< Stream: $chunk")
                         val jsonStr = Json.encodeToString(
                             StreamChunk.serializer(),
@@ -99,20 +134,49 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                 }
             } else {
                 // Use the new chatWithMessages method with full history
-                val result = llmEngine.chatWithMessages(messages, temperature)
+                val result = llmEngine.chatWithMessages(messages, temperature, tools)
 
                 // Calculate output size for logging
-                val outputTokens = result.length / 4
+                val outputTokens = result.text.length / 4
                 onDebug?.invoke(">>> Input: ~$inputTokens tokens, Output: ~$outputTokens tokens")
-                onDebug?.invoke("<<< Model Output: $result")
+                onDebug?.invoke("<<< Model Output: ${result.text}, toolCalls: ${result.toolCalls?.size}")
 
+                // Build the message with content and/or tool_calls
+                val messageObj = buildJsonObject {
+                    put("role", "assistant")
+                    if (result.toolCalls?.isNotEmpty() == true) {
+                        // Response with tool calls
+                        val toolCallsArray = buildJsonArray {
+                            result.toolCalls.forEachIndexed { index, tc ->
+                                add(buildJsonObject {
+                                    put("id", "call_${System.currentTimeMillis()}_$index")
+                                    put("type", "function")
+                                    put("function", buildJsonObject {
+                                        put("name", tc.name)
+                                        // tc.arguments is a Map, convert to JSON string
+                                        val argsJson = buildJsonObject {
+                                            tc.arguments.forEach { (k, v) ->
+                                                put(k, Json.encodeToJsonElement(v.toString()))
+                                            }
+                                        }.toString()
+                                        put("arguments", argsJson)
+                                    })
+                                })
+                            }
+                        }
+                        put("tool_calls", toolCallsArray)
+                        put("content", result.text)
+                    } else {
+                        // Regular text response
+                        put("content", result.text)
+                    }
+                }
+
+                val finishReason = if (result.toolCalls?.isNotEmpty() == true) "tool_calls" else "stop"
                 val choicesArray = buildJsonArray {
                     add(buildJsonObject {
-                        put("finish_reason", "stop")
-                        put("message", buildJsonObject {
-                            put("role", "assistant")
-                            put("content", result)
-                        })
+                        put("finish_reason", finishReason)
+                        put("message", messageObj)
                     })
                 }
                 val usageObj = buildJsonObject {

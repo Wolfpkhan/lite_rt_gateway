@@ -11,8 +11,11 @@ import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message as LtMessage
+import com.google.ai.edge.litertlm.OpenApiTool
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.tool
 import com.litert.gateway.openai.Message
+import com.litert.gateway.openai.Tool as OpenAITool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -25,6 +28,12 @@ import java.io.File
 private const val TAG = "LlmEngine"
 
 data class InitResult(val success: Boolean, val error: String? = null)
+
+// Result from chat including tool calls
+data class ChatResult(
+    val text: String = "",
+    val toolCalls: List<com.google.ai.edge.litertlm.ToolCall>? = null
+)
 
 data class BackendConfig(
     val text: String = "GPU",
@@ -39,6 +48,30 @@ class LlmEngine {
     private val inferenceMutex = Mutex()  // Serialize concurrent requests (LiteRT-LM only supports one session)
 
     private lateinit var context: Context
+
+    // Generic OpenApiTool wrapper that converts any OpenAI tool definition
+    private inner class GenericOpenApiTool(
+        private val name: String,
+        private val description: String,
+        private val parametersJson: String
+    ) : OpenApiTool {
+        override fun getToolDescriptionJsonString(): String {
+            return """
+            {
+                "name": "$name",
+                "description": "${description.escapeJson()}",
+                "parameters": $parametersJson
+            }
+            """.trimIndent()
+        }
+
+        override fun execute(paramsJsonString: String): String {
+            // Tool execution is done by caller, not by the model
+            // This is not called when automaticToolCalling = false
+            return """{"error": "Tool execution should be done by caller"}"""
+        }
+    }
+
     private var defaultTemperature: Float = 0.8f
     private var defaultMaxTokens: Int = 8192
     private var maxContextLength: Int = 131072  // 128K default (total input+output tokens)
@@ -131,13 +164,14 @@ class LlmEngine {
      */
     suspend fun chatWithMessages(
         messages: List<Message>,
-        temperature: Double?
-    ): String = withContext(Dispatchers.IO) {
+        temperature: Double?,
+        tools: List<OpenAITool>? = null
+    ): ChatResult = withContext(Dispatchers.IO) {
         inferenceMutex.withLock {
-            val e = engine ?: return@withContext "Error: Engine not initialized"
+            val e = engine ?: return@withContext ChatResult(text = "Error: Engine not initialized")
             try {
                 // Build conversation config with full history
-                val conversationConfig = buildConversationConfig(messages, temperature)
+                val conversationConfig = buildConversationConfig(messages, temperature, tools)
 
                 // The last message is the new input
                 val lastMessage = messages.lastOrNull()
@@ -146,12 +180,32 @@ class LlmEngine {
 
                 // Create conversation with history and send message
                 e.createConversation(conversationConfig).use { conversation ->
-                    val result = conversation.sendMessage(contents)
-                    result.toString()
+                    try {
+                        val result = conversation.sendMessage(contents)
+                        val toolCalls = result.toolCalls
+                        Log.i(TAG, "sendMessage completed. toolCalls: $toolCalls, toolCalls size: ${toolCalls?.size}")
+                        // If model returned tool calls, use them
+                        if (!toolCalls.isNullOrEmpty()) {
+                            ChatResult(
+                                text = result.toString(),
+                                toolCalls = toolCalls
+                            )
+                        } else {
+                            // No tool calls, return as regular text
+                            ChatResult(
+                                text = result.toString(),
+                                toolCalls = null
+                            )
+                        }
+                    } catch (parseEx: Exception) {
+                        // Tool call parsing failed - model returned malformed tool call text
+                        Log.w(TAG, "Tool call parsing failed: ${parseEx.message}")
+                        ChatResult(text = "Error: ${parseEx.message}")
+                    }
                 }
             } catch (ex: Exception) {
                 Log.e(TAG, "Inference failed: ${ex.message}", ex)
-                "Error: ${ex.message}"
+                ChatResult(text = "Error: ${ex.message}")
             }
         }
     }
@@ -182,7 +236,8 @@ class LlmEngine {
      */
     fun chatStreamWithMessages(
         messages: List<Message>,
-        temperature: Double?
+        temperature: Double?,
+        tools: List<OpenAITool>? = null
     ): Flow<String> = flow {
         inferenceMutex.withLock {
             val e = engine ?: run {
@@ -192,7 +247,7 @@ class LlmEngine {
 
             try {
                 // Build conversation config with full history
-                val conversationConfig = buildConversationConfig(messages, temperature)
+                val conversationConfig = buildConversationConfig(messages, temperature, tools)
 
                 // The last message is the new input
                 val lastMessage = messages.lastOrNull()
@@ -215,7 +270,11 @@ class LlmEngine {
     /**
      * Build ConversationConfig from OpenAI messages with full history support
      */
-    private fun buildConversationConfig(messages: List<Message>, temperature: Double?): ConversationConfig {
+    private fun buildConversationConfig(
+        messages: List<Message>,
+        temperature: Double?,
+        tools: List<OpenAITool>? = null
+    ): ConversationConfig {
         var systemInstruction: Contents? = null
         val initialMessages = mutableListOf<LtMessage>()
 
@@ -237,9 +296,22 @@ class LlmEngine {
                     }
                 }
                 "assistant" -> {
+                    // For assistant messages with tool_calls, we don't add them to initialMessages
+                    // since we're using automaticToolCalling = false
+                    // The caller will handle tool_calls by executing tools and sending results
                     msg.content?.let {
                         if (it.isNotBlank()) {
                             initialMessages.add(LtMessage.model(it))
+                        }
+                    }
+                }
+                "tool" -> {
+                    // Tool response message from caller
+                    msg.content?.let { result ->
+                        msg.toolCallId?.let { callId ->
+                            // Wrap in Contents for Message.tool()
+                            val toolResponseContent = Contents.of(Content.Text("$callId: $result"))
+                            initialMessages.add(LtMessage.tool(toolResponseContent))
                         }
                     }
                 }
@@ -254,11 +326,35 @@ class LlmEngine {
             temperature = effectiveTemp
         )
 
+        // Convert OpenAI tools to LiteRT OpenApiTool
+        val liteRtTools: List<com.google.ai.edge.litertlm.ToolProvider> = tools?.mapNotNull { openAiTool ->
+            val function = openAiTool.function
+            val paramsJson = function.parameters?.toString() ?: "{}"
+            Log.i(TAG, "Converting tool: ${function.name}, params: $paramsJson")
+            val openApiTool = GenericOpenApiTool(
+                name = function.name,
+                description = function.description,
+                parametersJson = paramsJson
+            )
+            tool(openApiTool)  // Wrap with tool() helper
+        } ?: emptyList()
+        Log.i(TAG, "liteRtTools size: ${liteRtTools.size}")
+
         return ConversationConfig(
             systemInstruction = systemInstruction,
             initialMessages = initialMessages,
-            samplerConfig = samplerConfig
+            samplerConfig = samplerConfig,
+            tools = liteRtTools,
+            automaticToolCalling = false  // Return tool_calls to caller
         )
+    }
+
+    private fun String.escapeJson(): String {
+        return this.replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
     }
 
     private fun buildContents(text: String, imageUrls: List<String>): Contents {

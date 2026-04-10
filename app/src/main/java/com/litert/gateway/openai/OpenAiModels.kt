@@ -14,13 +14,46 @@ data class OpenAIRequest(
     val topP: Double? = null,
     @SerialName("max_tokens")
     val maxTokens: Int? = null,
-    val stream: Boolean = false
+    val stream: Boolean = false,
+    val tools: List<Tool>? = null
 )
 
 @Serializable
 data class Message(
     val role: String,
-    val content: String? = null
+    val content: String? = null,
+    @SerialName("tool_calls")
+    val toolCalls: List<ToolCall>? = null,
+    @SerialName("tool_call_id")
+    val toolCallId: String? = null
+)
+
+// Tool definitions (for request)
+@Serializable
+data class Tool(
+    val type: String = "function",
+    val function: FunctionDefinition
+)
+
+@Serializable
+data class FunctionDefinition(
+    val name: String,
+    val description: String = "",
+    val parameters: JsonElement? = null
+)
+
+// Tool call (in response or assistant message)
+@Serializable
+data class ToolCall(
+    val id: String,
+    val type: String = "function",
+    val function: FunctionCall
+)
+
+@Serializable
+data class FunctionCall(
+    val name: String,
+    val arguments: String
 )
 
 @Serializable
