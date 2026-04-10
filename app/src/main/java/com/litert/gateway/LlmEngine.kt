@@ -39,9 +39,19 @@ class LlmEngine {
     private val inferenceMutex = Mutex()  // Serialize concurrent requests (LiteRT-LM only supports one session)
 
     private lateinit var context: Context
+    private var defaultTemperature: Float = 0.8f
+    private var defaultMaxTokens: Int = 8192
+    private var maxContextLength: Int = 131072  // 128K default (total input+output tokens)
 
     fun initializeWithResult(modelPath: String, context: Context, prefs: SharedPreferences): InitResult {
         this.context = context
+
+        // Load default inference parameters
+        defaultTemperature = prefs.getFloat("temperature", 0.8f)
+        defaultMaxTokens = prefs.getInt("max_tokens", 8192)
+        maxContextLength = prefs.getInt("max_context_length", 131072)  // maxNumTokens
+        Log.i(TAG, "Default temperature: $defaultTemperature, maxTokens: $defaultMaxTokens, maxContext: $maxContextLength")
+
         if (isInitialized) {
             return InitResult(true)
         }
@@ -63,7 +73,8 @@ class LlmEngine {
                 backend = textBackend,
                 visionBackend = visionBackend,
                 audioBackend = audioBackend,
-                cacheDir = context.cacheDir.path
+                cacheDir = context.cacheDir.path,
+                maxNumTokens = maxContextLength
             )
 
             engine = Engine(engineConfig)
@@ -235,10 +246,13 @@ class LlmEngine {
             }
         }
 
-        // Build sampler config if temperature is provided
-        val samplerConfig = temperature?.let {
-            SamplerConfig(topK = 10, topP = 0.95, temperature = it)
-        }
+        // Build sampler config (use request temperature or default)
+        val effectiveTemp = temperature?.toDouble() ?: defaultTemperature.toDouble()
+        val samplerConfig = SamplerConfig(
+            topK = 10,
+            topP = 0.95,
+            temperature = effectiveTemp
+        )
 
         return ConversationConfig(
             systemInstruction = systemInstruction,

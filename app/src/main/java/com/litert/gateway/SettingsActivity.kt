@@ -8,6 +8,7 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -21,6 +22,10 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var portEditText: EditText
     private lateinit var debugCheckBox: CheckBox
+    private lateinit var temperatureSeekBar: SeekBar
+    private lateinit var temperatureValueText: TextView
+    private lateinit var maxTokensSeekBar: SeekBar
+    private lateinit var maxTokensValueText: TextView
     private lateinit var selectFolderButton: Button
     private lateinit var defaultFolderButton: Button
     private lateinit var modelPathText: TextView
@@ -62,6 +67,10 @@ class SettingsActivity : AppCompatActivity() {
     private fun initViews() {
         portEditText = findViewById(R.id.portEditText)
         debugCheckBox = findViewById(R.id.debugCheckBox)
+        temperatureSeekBar = findViewById(R.id.temperatureSeekBar)
+        temperatureValueText = findViewById(R.id.temperatureValueText)
+        maxTokensSeekBar = findViewById(R.id.maxTokensSeekBar)
+        maxTokensValueText = findViewById(R.id.maxTokensValueText)
         selectFolderButton = findViewById(R.id.selectFolderButton)
         defaultFolderButton = findViewById(R.id.defaultFolderButton)
         modelPathText = findViewById(R.id.modelPathText)
@@ -84,6 +93,16 @@ class SettingsActivity : AppCompatActivity() {
     private fun loadSettings() {
         portEditText.setText(prefs.getInt("port", 8080).toString())
         debugCheckBox.isChecked = prefs.getBoolean("debug_log", false)
+
+        // Load temperature (0.0 to 2.0, default 0.8)
+        val temperature = prefs.getFloat("temperature", 0.8f)
+        temperatureSeekBar.progress = (temperature * 100).toInt()
+        temperatureValueText.text = String.format("%.1f", temperature)
+
+        // Load maxTokens (2K to 100M, stored as int, default 8192)
+        val maxTokens = prefs.getInt("max_tokens", 8192)
+        maxTokensSeekBar.progress = tokensToProgress(maxTokens)
+        maxTokensValueText.text = formatTokens(maxTokens)
 
         // Load backends
         val backendMap = mapOf("CPU" to 0, "GPU" to 1, "NPU" to 2)
@@ -165,6 +184,26 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        // Temperature SeekBar listener
+        temperatureSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val temp = progress / 100f
+                temperatureValueText.text = String.format("%.1f", temp)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        // MaxTokens SeekBar listener
+        maxTokensSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val tokens = progressToTokens(progress)
+                maxTokensValueText.text = formatTokens(tokens)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
         saveButton.setOnClickListener {
             saveSettings()
         }
@@ -177,6 +216,14 @@ class SettingsActivity : AppCompatActivity() {
 
         // Save debug
         prefs.edit().putBoolean("debug_log", debugCheckBox.isChecked).apply()
+
+        // Save temperature (0.0 to 2.0)
+        val temperature = temperatureSeekBar.progress / 100f
+        prefs.edit().putFloat("temperature", temperature).apply()
+
+        // Save maxTokens
+        val maxTokens = progressToTokens(maxTokensSeekBar.progress)
+        prefs.edit().putInt("max_tokens", maxTokens).apply()
 
         // Save backends
         val backends = listOf("CPU", "GPU", "NPU")
@@ -191,6 +238,30 @@ class SettingsActivity : AppCompatActivity() {
 
         Toast.makeText(this, "配置已保存", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun formatTokens(tokens: Int): String {
+        return when {
+            tokens >= 1000000 -> "${tokens / 1000000}M"
+            tokens >= 1000 -> "${tokens / 1000}K"
+            else -> tokens.toString()
+        }
+    }
+
+    private fun progressToTokens(progress: Int): Int {
+        // Progress: 0-100 maps to 2K-100M logarithmically
+        // 0 -> 2000, 50 -> ~32K, 100 -> 100000000
+        val minLog = kotlin.math.ln(2000.0)
+        val maxLog = kotlin.math.ln(100000000.0)
+        val scale = (maxLog - minLog) / 100.0
+        return kotlin.math.exp(minLog + scale * progress).toInt()
+    }
+
+    private fun tokensToProgress(tokens: Int): Int {
+        val minLog = kotlin.math.ln(2000.0)
+        val maxLog = kotlin.math.ln(100000000.0)
+        val scale = (maxLog - minLog) / 100.0
+        return ((kotlin.math.ln(tokens.toDouble()) - minLog) / scale).toInt().coerceIn(0, 100)
     }
 
     private fun scanModels() {
