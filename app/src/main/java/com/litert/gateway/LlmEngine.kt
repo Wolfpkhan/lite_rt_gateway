@@ -120,6 +120,7 @@ class LlmEngine {
 
     /**
      * Get or create a cached conversation session
+     * Note: LiteRT-LM only supports one active session, so we close old sessions before creating new ones
      */
     private fun getOrCreateSession(
         messages: List<Message>,
@@ -138,8 +139,8 @@ class LlmEngine {
             return info.session
         }
 
-        // Clean up stale sessions before creating new one
-        cleanupStaleSessions()
+        // LiteRT-LM only supports one active session - close all existing sessions first
+        closeAllSessions()
 
         // Create new session
         Log.i(TAG, "Session cache MISS: $sessionId, creating new")
