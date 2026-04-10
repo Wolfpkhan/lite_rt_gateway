@@ -203,12 +203,19 @@ class LlmEngine {
         // Load default inference parameters
         defaultTemperature = prefs.getFloat("temperature", 0.8f)
         defaultMaxTokens = prefs.getInt("max_tokens", 8192)
-        maxContextLength = prefs.getInt("max_context_length", 131072)  // maxNumTokens
-        Log.i(TAG, "Default temperature: $defaultTemperature, maxTokens: $defaultMaxTokens, maxContext: $maxContextLength")
+        val newMaxContextLength = prefs.getInt("max_context_length", 131072)  // maxNumTokens
+        Log.i(TAG, "Default temperature: $defaultTemperature, maxTokens: $defaultMaxTokens, maxContext: $newMaxContextLength")
 
+        // Check if engine needs to be recreated due to config change
         if (isInitialized) {
-            return InitResult(true)
+            if (maxContextLength != newMaxContextLength) {
+                Log.i(TAG, "maxContextLength changed from $maxContextLength to $newMaxContextLength, recreating engine...")
+                close()  // Close existing engine
+            } else {
+                return InitResult(true)
+            }
         }
+        maxContextLength = newMaxContextLength
 
         return try {
             Log.i(TAG, "Initializing LiteRT-LM engine...")

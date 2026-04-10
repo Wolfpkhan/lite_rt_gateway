@@ -26,6 +26,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var temperatureValueText: TextView
     private lateinit var maxTokensSeekBar: SeekBar
     private lateinit var maxTokensValueText: TextView
+    private lateinit var maxContextSeekBar: SeekBar
+    private lateinit var maxContextValueText: TextView
     private lateinit var selectFolderButton: Button
     private lateinit var defaultFolderButton: Button
     private lateinit var modelPathText: TextView
@@ -71,6 +73,8 @@ class SettingsActivity : AppCompatActivity() {
         temperatureValueText = findViewById(R.id.temperatureValueText)
         maxTokensSeekBar = findViewById(R.id.maxTokensSeekBar)
         maxTokensValueText = findViewById(R.id.maxTokensValueText)
+        maxContextSeekBar = findViewById(R.id.maxContextSeekBar)
+        maxContextValueText = findViewById(R.id.maxContextValueText)
         selectFolderButton = findViewById(R.id.selectFolderButton)
         defaultFolderButton = findViewById(R.id.defaultFolderButton)
         modelPathText = findViewById(R.id.modelPathText)
@@ -103,6 +107,11 @@ class SettingsActivity : AppCompatActivity() {
         val maxTokens = prefs.getInt("max_tokens", 8192)
         maxTokensSeekBar.progress = tokensToProgress(maxTokens)
         maxTokensValueText.text = formatTokens(maxTokens)
+
+        // Load maxContextLength (4K to 128K, stored as int, default 131072)
+        val maxContextLength = prefs.getInt("max_context_length", 131072)
+        maxContextSeekBar.progress = contextLengthToProgress(maxContextLength)
+        maxContextValueText.text = formatContextLength(maxContextLength)
 
         // Load backends
         val backendMap = mapOf("CPU" to 0, "GPU" to 1, "NPU" to 2)
@@ -204,6 +213,16 @@ class SettingsActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
+        // MaxContext SeekBar listener
+        maxContextSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val contextLen = progressToContextLength(progress)
+                maxContextValueText.text = formatContextLength(contextLen)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
         saveButton.setOnClickListener {
             saveSettings()
         }
@@ -224,6 +243,10 @@ class SettingsActivity : AppCompatActivity() {
         // Save maxTokens
         val maxTokens = progressToTokens(maxTokensSeekBar.progress)
         prefs.edit().putInt("max_tokens", maxTokens).apply()
+
+        // Save maxContextLength
+        val maxContextLength = progressToContextLength(maxContextSeekBar.progress)
+        prefs.edit().putInt("max_context_length", maxContextLength).apply()
 
         // Save backends
         val backends = listOf("CPU", "GPU", "NPU")
@@ -260,6 +283,29 @@ class SettingsActivity : AppCompatActivity() {
     private fun tokensToProgress(tokens: Int): Int {
         val minLog = kotlin.math.ln(2000.0)
         val maxLog = kotlin.math.ln(100000000.0)
+        val scale = (maxLog - minLog) / 100.0
+        return ((kotlin.math.ln(tokens.toDouble()) - minLog) / scale).toInt().coerceIn(0, 100)
+    }
+
+    private fun formatContextLength(tokens: Int): String {
+        return when {
+            tokens >= 1024 -> "${tokens / 1024}K"
+            else -> tokens.toString()
+        }
+    }
+
+    private fun progressToContextLength(progress: Int): Int {
+        // Progress: 0-100 maps to 4K-128K logarithmically
+        // 0 -> 4096, 50 -> ~32K, 100 -> 131072
+        val minLog = kotlin.math.ln(4096.0)
+        val maxLog = kotlin.math.ln(131072.0)
+        val scale = (maxLog - minLog) / 100.0
+        return kotlin.math.exp(minLog + scale * progress).toInt()
+    }
+
+    private fun contextLengthToProgress(tokens: Int): Int {
+        val minLog = kotlin.math.ln(4096.0)
+        val maxLog = kotlin.math.ln(131072.0)
         val scale = (maxLog - minLog) / 100.0
         return ((kotlin.math.ln(tokens.toDouble()) - minLog) / scale).toInt().coerceIn(0, 100)
     }

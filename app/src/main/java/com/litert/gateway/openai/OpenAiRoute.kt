@@ -36,7 +36,36 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
             val messages = messagesJson.map { msgJson ->
                 val msgObj = msgJson.jsonObject
                 val role = msgObj["role"]?.jsonPrimitive?.content ?: "user"
-                val content = msgObj["content"]?.jsonPrimitive?.content
+
+                // Handle content: can be string or array (multi-modal)
+                val content = when (val contentVal = msgObj["content"]) {
+                    is JsonPrimitive -> contentVal.content
+                    is JsonArray -> {
+                        // Multi-modal content: extract text and image URLs
+                        val textParts = mutableListOf<String>()
+                        val imageUrls = mutableListOf<String>()
+                        contentVal.forEach { item ->
+                            val obj = item.jsonObject
+                            when (obj["type"]?.jsonPrimitive?.content) {
+                                "text" -> obj["text"]?.jsonPrimitive?.content?.let { textParts.add(it) }
+                                "image_url" -> obj["image_url"]?.jsonObject?.get("url")?.jsonPrimitive?.content?.let { imageUrls.add(it) }
+                            }
+                        }
+                        // Store image URLs in a special field or encode them
+                        if (imageUrls.isNotEmpty()) {
+                            // For now, return text with image URL indicator
+                            val imageIndicator = imageUrls.joinToString("; ") { "[image: $it]" }
+                            if (textParts.isNotEmpty()) {
+                                "${textParts.joinToString(" ")}\n$imageIndicator"
+                            } else {
+                                imageIndicator
+                            }
+                        } else {
+                            textParts.joinToString(" ")
+                        }
+                    }
+                    else -> null
+                }
 
                 // Parse tool_calls if present
                 val toolCalls = msgObj["tool_calls"]?.jsonArray?.map { tcJson ->
