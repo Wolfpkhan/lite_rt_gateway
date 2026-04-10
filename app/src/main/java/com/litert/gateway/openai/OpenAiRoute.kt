@@ -52,8 +52,10 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
             onDebug?.invoke(">>> Request with ${messages.size} messages")
 
             // Calculate input size for logging
-            val totalInputChars = messages.sumOf { it.content?.length ?: 0 }
-            val inputTokens = totalInputChars / 4
+            val totalInputChars = messages.sumOf { msg ->
+                msg.content?.length ?: 0
+            }
+            val inputTokens = if (totalInputChars > 0) totalInputChars / 4 else 1
             onDebug?.invoke(">>> Input size: ~$inputTokens tokens")
 
             if (stream) {

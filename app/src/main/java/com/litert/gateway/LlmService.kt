@@ -122,8 +122,13 @@ class LlmService : Service() {
             log("Server started on http://localhost:$port")
             updateNotification("Server running on http://localhost:$port")
         } catch (e: Exception) {
-            log("Server error: ${e.message}")
-            updateNotification("Server error: ${e.message}")
+            val errorMsg = if (e.message?.contains("Address already in use") == true) {
+                "Port $port is already in use. Please stop the existing service first."
+            } else {
+                "Server error: ${e.message}"
+            }
+            log("ERROR: $errorMsg")
+            updateNotification(errorMsg)
             stopSelf()
         }
     }
