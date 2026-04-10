@@ -5,10 +5,13 @@ import android.content.SharedPreferences
 import android.util.Base64
 import android.util.Log
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message as LtMessage
+import com.google.ai.edge.litertlm.SamplerConfig
 import com.litert.gateway.openai.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -33,7 +36,7 @@ class LlmEngine {
     private var engine: Engine? = null
     private var isInitialized = false
     private val cacheDir: File by lazy { File(context.cacheDir, "vision_images").also { it.mkdirs() } }
-    private val inferenceMutex = Mutex()  // Mutex for thread-safe inference
+    private val inferenceMutex = Mutex()  // Serialize concurrent requests (LiteRT-LM only supports one session)
 
     private lateinit var context: Context
 
@@ -111,25 +114,27 @@ class LlmEngine {
     }
 
     /**
-     * Chat with full OpenAI message history (stateless, thread-safe)
-     * For now, processes the last message only (conversation history not supported by base API)
+     * Chat with full OpenAI message history (stateless)
+     * Uses ConversationConfig.initialMessages to pass full conversation history
+     * Note: LiteRT-LM only supports one session at a time, so requests are serialized
      */
     suspend fun chatWithMessages(
         messages: List<Message>,
         temperature: Double?
     ): String = withContext(Dispatchers.IO) {
-        inferenceMutex.withLock {  // Thread-safe: serialize concurrent requests
+        inferenceMutex.withLock {
             val e = engine ?: return@withContext "Error: Engine not initialized"
             try {
-                // Parse the last message for content and media
+                // Build conversation config with full history
+                val conversationConfig = buildConversationConfig(messages, temperature)
+
+                // The last message is the new input
                 val lastMessage = messages.lastOrNull()
                 val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
-
-                // Build contents for the new message
                 val contents = buildContents(textContent, mediaUrls)
 
-                // Create conversation and send message
-                e.createConversation().use { conversation ->
+                // Create conversation with history and send message
+                e.createConversation(conversationConfig).use { conversation ->
                     val result = conversation.sendMessage(contents)
                     result.toString()
                 }
@@ -160,29 +165,31 @@ class LlmEngine {
     }.flowOn(Dispatchers.IO)
 
     /**
-     * Streaming chat with full OpenAI message history (stateless, thread-safe)
-     * For now, processes the last message only (conversation history not supported by base API)
+     * Streaming chat with full OpenAI message history (stateless)
+     * Uses ConversationConfig.initialMessages to pass full conversation history
+     * Note: LiteRT-LM only supports one session at a time, so requests are serialized
      */
     fun chatStreamWithMessages(
         messages: List<Message>,
         temperature: Double?
     ): Flow<String> = flow {
-        inferenceMutex.withLock {  // Thread-safe: serialize concurrent requests
+        inferenceMutex.withLock {
             val e = engine ?: run {
                 emit("Error: Engine not initialized")
                 return@flow
             }
 
             try {
-                // Parse the last message for content and media
+                // Build conversation config with full history
+                val conversationConfig = buildConversationConfig(messages, temperature)
+
+                // The last message is the new input
                 val lastMessage = messages.lastOrNull()
                 val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
-
-                // Build contents for the new message
                 val contents = buildContents(textContent, mediaUrls)
 
-                // Create conversation and stream response
-                e.createConversation().use { conversation ->
+                // Create conversation with history and stream response
+                e.createConversation(conversationConfig).use { conversation ->
                     conversation.sendMessageAsync(contents).collect { msg ->
                         emit(msg.toString())
                     }
@@ -193,6 +200,52 @@ class LlmEngine {
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Build ConversationConfig from OpenAI messages with full history support
+     */
+    private fun buildConversationConfig(messages: List<Message>, temperature: Double?): ConversationConfig {
+        var systemInstruction: Contents? = null
+        val initialMessages = mutableListOf<LtMessage>()
+
+        for (msg in messages) {
+            when (msg.role.lowercase()) {
+                "system" -> {
+                    // Use the last system message as instruction
+                    msg.content?.let {
+                        if (it.isNotBlank()) {
+                            systemInstruction = Contents.of(it)
+                        }
+                    }
+                }
+                "user" -> {
+                    msg.content?.let {
+                        if (it.isNotBlank()) {
+                            initialMessages.add(LtMessage.user(it))
+                        }
+                    }
+                }
+                "assistant" -> {
+                    msg.content?.let {
+                        if (it.isNotBlank()) {
+                            initialMessages.add(LtMessage.model(it))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Build sampler config if temperature is provided
+        val samplerConfig = temperature?.let {
+            SamplerConfig(topK = 10, topP = 0.95, temperature = it)
+        }
+
+        return ConversationConfig(
+            systemInstruction = systemInstruction,
+            initialMessages = initialMessages,
+            samplerConfig = samplerConfig
+        )
+    }
 
     private fun buildContents(text: String, imageUrls: List<String>): Contents {
         if (imageUrls.isEmpty()) {

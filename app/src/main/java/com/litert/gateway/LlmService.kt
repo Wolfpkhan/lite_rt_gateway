@@ -88,6 +88,8 @@ class LlmService : Service() {
         if (!loadResult.success) {
             log("ERROR: ${loadResult.error}")
             updateNotification("Load failed: ${loadResult.error}")
+            // Stop service since it cannot function
+            stopSelf()
             return
         }
 
@@ -115,9 +117,15 @@ class LlmService : Service() {
             }
         }
 
-        server?.start(wait = false)
-        log("Server started on http://localhost:$port")
-        updateNotification("Server running on http://localhost:$port")
+        try {
+            server?.start(wait = false)
+            log("Server started on http://localhost:$port")
+            updateNotification("Server running on http://localhost:$port")
+        } catch (e: Exception) {
+            log("Server error: ${e.message}")
+            updateNotification("Server error: ${e.message}")
+            stopSelf()
+        }
     }
 
     private fun log(message: String) {

@@ -32,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private val statusText by lazy { findViewById<TextView>(R.id.statusText) }
     private val urlText by lazy { findViewById<TextView>(R.id.urlText) }
     private val settingsButton by lazy { findViewById<Button>(R.id.settingsButton) }
+    private val helpButton by lazy { findViewById<Button>(R.id.helpButton) }
     private val startButton by lazy { findViewById<Button>(R.id.startButton) }
     private val stopButton by lazy { findViewById<Button>(R.id.stopButton) }
     private val logText by lazy { findViewById<TextView>(R.id.logText) }
@@ -109,6 +110,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
+        helpButton.setOnClickListener {
+            startActivity(Intent(this, HelpActivity::class.java))
+        }
+
         settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
