@@ -38,13 +38,13 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                 val role = msgObj["role"]?.jsonPrimitive?.content ?: "user"
 
                 // Handle content: can be string or array (multi-modal)
+                val imageUrls = mutableListOf<String>()
+                val audioUrls = mutableListOf<String>()
                 val content = when (val contentVal = msgObj["content"]) {
                     is JsonPrimitive -> contentVal.content
                     is JsonArray -> {
                         // Multi-modal content: extract text, image URLs, and audio URLs
                         val textParts = mutableListOf<String>()
-                        val imageUrls = mutableListOf<String>()
-                        val audioUrls = mutableListOf<String>()
                         contentVal.forEach { item ->
                             val obj = item.jsonObject
                             when (obj["type"]?.jsonPrimitive?.content) {
@@ -53,11 +53,7 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                                 "audio" -> obj["audio"]?.jsonObject?.get("url")?.jsonPrimitive?.content?.let { audioUrls.add(it) }
                             }
                         }
-                        val parts = mutableListOf<String>()
-                        if (textParts.isNotEmpty()) parts.add(textParts.joinToString(" "))
-                        if (imageUrls.isNotEmpty()) parts.add(imageUrls.joinToString("; ") { "[image: $it]" })
-                        if (audioUrls.isNotEmpty()) parts.add(audioUrls.joinToString("; ") { "[audio: $it]" })
-                        parts.joinToString("\n").ifEmpty { null }
+                        textParts.joinToString("\n").ifEmpty { null }
                     }
                     else -> null
                 }
@@ -79,7 +75,9 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     role = role,
                     content = content,
                     toolCalls = toolCalls,
-                    toolCallId = msgObj["tool_call_id"]?.jsonPrimitive?.content
+                    toolCallId = msgObj["tool_call_id"]?.jsonPrimitive?.content,
+                    imageUrls = imageUrls,
+                    audioUrls = audioUrls
                 )
             }
 
@@ -125,36 +123,60 @@ fun Route.chatCompletionsRoute(llmEngine: LlmEngine, onDebug: ((String) -> Unit)
                     val outputStream = this
                     val id = "litert-${System.currentTimeMillis()}"
 
-                    llmEngine.chatStreamWithMessages(messages, temperature, tools).collect { chunk ->
-                        onDebug?.invoke("<<< Stream: $chunk")
-                        val jsonStr = Json.encodeToString(
+                    try {
+                        llmEngine.chatStreamWithMessages(messages, temperature, tools).collect { chunk ->
+                            onDebug?.invoke("<<< Stream: $chunk")
+                            val jsonStr = Json.encodeToString(
+                                StreamChunk.serializer(),
+                                StreamChunk(
+                                    id = id,
+                                    choices = listOf(
+                                        StreamChoice(delta = StreamDelta("assistant", chunk))
+                                    )
+                                )
+                            )
+                            outputStream.write("data: $jsonStr\n\n".toByteArray())
+                            outputStream.flush()
+                        }
+
+                        val finalJson = Json.encodeToString(
                             StreamChunk.serializer(),
                             StreamChunk(
                                 id = id,
                                 choices = listOf(
-                                    StreamChoice(delta = StreamDelta("assistant", chunk))
+                                    StreamChoice(
+                                        delta = StreamDelta("assistant", ""),
+                                        finishReason = "stop"
+                                    )
                                 )
                             )
                         )
-                        outputStream.write("data: $jsonStr\n\n".toByteArray())
+                        outputStream.write("data: $finalJson\n\n".toByteArray())
+                        outputStream.write("data: [DONE]\n\n".toByteArray())
                         outputStream.flush()
-                    }
-
-                    val finalJson = Json.encodeToString(
-                        StreamChunk.serializer(),
-                        StreamChunk(
-                            id = id,
-                            choices = listOf(
-                                StreamChoice(
-                                    delta = StreamDelta("assistant", ""),
-                                    finishReason = "stop"
+                    } catch (e: Throwable) {
+                        onDebug?.invoke("!!! Stream error: ${e.message}")
+                        // Try to send error message before closing
+                        try {
+                            val errorJson = Json.encodeToString(
+                                StreamChunk.serializer(),
+                                StreamChunk(
+                                    id = id,
+                                    choices = listOf(
+                                        StreamChoice(
+                                            delta = StreamDelta("assistant", "[Error] ${e.message}"),
+                                            finishReason = "error"
+                                        )
+                                    )
                                 )
                             )
-                        )
-                    )
-                    outputStream.write("data: $finalJson\n\n".toByteArray())
-                    outputStream.write("data: [DONE]\n\n".toByteArray())
-                    outputStream.flush()
+                            outputStream.write("data: $errorJson\n\n".toByteArray())
+                            outputStream.write("data: [DONE]\n\n".toByteArray())
+                            outputStream.flush()
+                        } catch (ignored: Throwable) {
+                            // Stream may already be closed
+                        }
+                    }
                 }
             } else {
                 // Use the new chatWithMessages method with full history

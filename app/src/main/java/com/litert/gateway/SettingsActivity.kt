@@ -35,6 +35,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var textBackendSpinner: Spinner
     private lateinit var visionBackendSpinner: Spinner
     private lateinit var audioBackendSpinner: Spinner
+    private lateinit var imageMaxDimensionSpinner: Spinner
     private lateinit var saveButton: Button
 
     private var availableModels: List<File> = emptyList()
@@ -82,16 +83,23 @@ class SettingsActivity : AppCompatActivity() {
         textBackendSpinner = findViewById(R.id.textBackendSpinner)
         visionBackendSpinner = findViewById(R.id.visionBackendSpinner)
         audioBackendSpinner = findViewById(R.id.audioBackendSpinner)
+        imageMaxDimensionSpinner = findViewById(R.id.imageMaxDimensionSpinner)
         saveButton = findViewById(R.id.saveButton)
 
         // Setup backend spinners
         val backendOptions = listOf("CPU", "GPU", "NPU")
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, backendOptions)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        val backendAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, backendOptions)
+        backendAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
 
-        textBackendSpinner.adapter = adapter
-        visionBackendSpinner.adapter = adapter
-        audioBackendSpinner.adapter = adapter
+        textBackendSpinner.adapter = backendAdapter
+        visionBackendSpinner.adapter = backendAdapter
+        audioBackendSpinner.adapter = backendAdapter
+
+        // Setup image max dimension spinner
+        val dimensionOptions = listOf("512px", "1024px", "1536px", "2048px", "3072px (原始)")
+        val dimensionAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, dimensionOptions)
+        dimensionAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        imageMaxDimensionSpinner.adapter = dimensionAdapter
     }
 
     private fun loadSettings() {
@@ -118,6 +126,11 @@ class SettingsActivity : AppCompatActivity() {
         prefs.getString("text_backend", "GPU")?.let { textBackendSpinner.setSelection(backendMap[it] ?: 1) }
         prefs.getString("vision_backend", "GPU")?.let { visionBackendSpinner.setSelection(backendMap[it] ?: 1) }
         prefs.getString("audio_backend", "CPU")?.let { audioBackendSpinner.setSelection(backendMap[it] ?: 0) }
+
+        // Load image max dimension (default 1024)
+        val dimensionMap = mapOf(512 to 0, 1024 to 1, 1536 to 2, 2048 to 3, 3072 to 4)
+        val imageMaxDim = prefs.getInt("image_max_dimension", 1024)
+        imageMaxDimensionSpinner.setSelection(dimensionMap[imageMaxDim] ?: 1)
 
         updateModelPathText()
     }
@@ -253,6 +266,10 @@ class SettingsActivity : AppCompatActivity() {
         prefs.edit().putString("text_backend", backends[textBackendSpinner.selectedItemPosition]).apply()
         prefs.edit().putString("vision_backend", backends[visionBackendSpinner.selectedItemPosition]).apply()
         prefs.edit().putString("audio_backend", backends[audioBackendSpinner.selectedItemPosition]).apply()
+
+        // Save image max dimension
+        val dimensions = listOf(512, 1024, 1536, 2048, 3072)
+        prefs.edit().putInt("image_max_dimension", dimensions[imageMaxDimensionSpinner.selectedItemPosition]).apply()
 
         // Save selected model
         if (selectedModelPath.isNotEmpty()) {

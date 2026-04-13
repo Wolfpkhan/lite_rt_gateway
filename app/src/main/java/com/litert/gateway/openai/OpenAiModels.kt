@@ -25,7 +25,10 @@ data class Message(
     @SerialName("tool_calls")
     val toolCalls: List<ToolCall>? = null,
     @SerialName("tool_call_id")
-    val toolCallId: String? = null
+    val toolCallId: String? = null,
+    // Internal fields (not from JSON) for multi-modal support
+    val imageUrls: List<String> = emptyList(),
+    val audioUrls: List<String> = emptyList()
 )
 
 // Tool definitions (for request)

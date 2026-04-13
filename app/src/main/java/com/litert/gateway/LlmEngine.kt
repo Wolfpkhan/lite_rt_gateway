@@ -2,6 +2,8 @@ package com.litert.gateway
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import com.google.ai.edge.litertlm.Backend
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 
@@ -196,6 +199,7 @@ class LlmEngine {
     private var defaultTemperature: Float = 0.8f
     private var defaultMaxTokens: Int = 8192
     private var maxContextLength: Int = 131072  // 128K default (total input+output tokens)
+    private var imageMaxDimension: Int = 1024    // default max image dimension in pixels
 
     fun initializeWithResult(modelPath: String, context: Context, prefs: SharedPreferences): InitResult {
         this.context = context
@@ -204,7 +208,8 @@ class LlmEngine {
         defaultTemperature = prefs.getFloat("temperature", 0.8f)
         defaultMaxTokens = prefs.getInt("max_tokens", 8192)
         val newMaxContextLength = prefs.getInt("max_context_length", 131072)  // maxNumTokens
-        Log.i(TAG, "Default temperature: $defaultTemperature, maxTokens: $defaultMaxTokens, maxContext: $newMaxContextLength")
+        imageMaxDimension = prefs.getInt("image_max_dimension", 1024)  // max image dimension in pixels
+        Log.i(TAG, "Default temperature: $defaultTemperature, maxTokens: $defaultMaxTokens, maxContext: $newMaxContextLength, imageMaxDim: $imageMaxDimension")
 
         // Check if engine needs to be recreated due to config change
         if (isInitialized) {
@@ -303,8 +308,8 @@ class LlmEngine {
                 // Send only the last message (history is cached)
                 val lastMessage = messages.lastOrNull()
                     ?: return@withContext ChatResult(text = "Error: No message")
-                val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
-                val contents = buildContents(textContent, mediaUrls)
+                val (textContent, imageUrls, audioUrls) = parseOpenAIMessage(lastMessage)
+                val contents = buildContents(textContent, imageUrls, audioUrls)
 
                 val result = conversation.sendMessage(contents)
                 val toolCalls = result.toolCalls
@@ -355,26 +360,27 @@ class LlmEngine {
         tools: List<OpenAITool>? = null
     ): Flow<String> = flow {
         inferenceMutex.withLock {
+            // Get or create cached session
+            val conversation = getOrCreateSession(messages, temperature, tools)
+
+            // Send only the last message (history is cached)
+            val lastMessage = messages.lastOrNull()
+                ?: run {
+                    emit("Error: No message")
+                    return@flow
+                }
+            val (textContent, imageUrls, audioUrls) = parseOpenAIMessage(lastMessage)
+            val contents = buildContents(textContent, imageUrls, audioUrls)
+
+            // Stream response
             try {
-                // Get or create cached session
-                val conversation = getOrCreateSession(messages, temperature, tools)
-
-                // Send only the last message (history is cached)
-                val lastMessage = messages.lastOrNull()
-                    ?: run {
-                        emit("Error: No message")
-                        return@flow
-                    }
-                val (textContent, mediaUrls) = parseOpenAIMessage(lastMessage)
-                val contents = buildContents(textContent, mediaUrls)
-
-                // Stream response
                 conversation.sendMessageAsync(contents).collect { msg ->
                     emit(msg.toString())
                 }
-            } catch (ex: Exception) {
-                Log.e(TAG, "Stream inference failed: ${ex.message}", ex)
-                emit("Error: ${ex.message}")
+            } catch (err: Throwable) {
+                Log.e(TAG, "Stream inference failed: ${err.message}", err)
+                // Don't try to emit after a Throwable - it may have corrupted the flow state
+                throw err  // Re-throw so the caller can handle it
             }
         }
     }.flowOn(Dispatchers.IO)
@@ -469,39 +475,43 @@ class LlmEngine {
             .replace("\t", "\\t")
     }
 
-    private fun buildContents(text: String, imageUrls: List<String>): Contents {
-        if (imageUrls.isEmpty()) {
-            return Contents.of(Content.Text(text))
-        }
-
+    private fun buildContents(text: String, imageUrls: List<String>, audioUrls: List<String> = emptyList()): Contents {
         val contentList = mutableListOf<Content>()
 
+        // Add image contents
         for (url in imageUrls) {
             try {
-                when {
-                    url.startsWith("data:image") -> {
-                        val imageBytes = decodeImageUrl(url)
-                        if (imageBytes != null) {
-                            contentList.add(Content.ImageBytes(imageBytes))
-                        }
-                    }
-                    url.startsWith("data:audio") -> {
-                        val audioBytes = decodeAudioUrl(url)
-                        if (audioBytes != null) {
-                            contentList.add(Content.AudioBytes(audioBytes))
-                        }
-                    }
+                val imageBytes = decodeImageUrl(url)
+                if (imageBytes != null) {
+                    contentList.add(Content.ImageBytes(imageBytes))
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to decode media: ${e.message}")
+                Log.e(TAG, "Failed to decode image: ${e.message}")
             }
         }
 
+        // Add audio contents
+        for (url in audioUrls) {
+            try {
+                val audioBytes = decodeAudioUrl(url)
+                if (audioBytes != null) {
+                    contentList.add(Content.AudioBytes(audioBytes))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to decode audio: ${e.message}")
+            }
+        }
+
+        // Add text content
         if (text.isNotEmpty()) {
             contentList.add(Content.Text(text))
         }
 
-        return Contents.of(contentList)
+        return if (contentList.isEmpty()) {
+            Contents.of(Content.Text(""))
+        } else {
+            Contents.of(contentList)
+        }
     }
 
     private fun decodeAudioUrl(url: String): ByteArray? {
@@ -517,7 +527,7 @@ class LlmEngine {
     }
 
     private fun decodeImageUrl(url: String): ByteArray? {
-        return when {
+        val imageBytes = when {
             url.startsWith("data:") -> {
                 val parts = url.substringAfter("data:").split(";base64,")
                 if (parts.size == 2) {
@@ -537,20 +547,82 @@ class LlmEngine {
                 }
             }
         }
+        return imageBytes?.let { resizeImageIfNeeded(it, imageMaxDimension) }
+    }
+
+    /**
+     * Resize image if it exceeds max dimension, maintaining aspect ratio
+     */
+    private fun resizeImageIfNeeded(imageBytes: ByteArray, maxDimension: Int): ByteArray {
+        return try {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, options)
+
+            val width = options.outWidth
+            val height = options.outHeight
+            if (width <= maxDimension && height <= maxDimension) {
+                return imageBytes  // No resize needed
+            }
+
+            // Calculate sample size for efficient downscaling
+            val sampleSize = calculateInSampleSize(width, height, maxDimension, maxDimension)
+
+            options.inJustDecodeBounds = false
+            options.inSampleSize = sampleSize
+            options.inPreferredConfig = Bitmap.Config.ARGB_8888
+
+            val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, options)
+                ?: return imageBytes
+
+            // Resize to exact max dimension maintaining aspect ratio
+            val scaledBitmap = scaleBitmap(bitmap, maxDimension)
+            bitmap.recycle()
+
+            val outputStream = ByteArrayOutputStream()
+            scaledBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+            scaledBitmap.recycle()
+
+            Log.i(TAG, "Image resized from ${width}x${height} to ${scaledBitmap.width}x${scaledBitmap.height}, output size: ${outputStream.size()} bytes")
+            outputStream.toByteArray()
+        } catch (e: Exception) {
+            Log.e(TAG, "Image resize failed: ${e.message}")
+            imageBytes  // Fallback to original
+        }
+    }
+
+    private fun calculateInSampleSize(w: Int, h: Int, reqW: Int, reqH: Int): Int {
+        var inSampleSize = 1
+        if (h > reqH || w > reqW) {
+            val halfH = h / 2
+            val halfW = w / 2
+            while ((halfH / inSampleSize) >= reqH && (halfW / inSampleSize) >= reqW) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
+    }
+
+    private fun scaleBitmap(bitmap: Bitmap, maxDimension: Int): Bitmap {
+        val ratio = minOf(maxDimension.toFloat() / bitmap.width, maxDimension.toFloat() / bitmap.height)
+        if (ratio >= 1f) return bitmap
+        val newWidth = (bitmap.width * ratio).toInt()
+        val newHeight = (bitmap.height * ratio).toInt()
+        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
     }
 
     /**
      * Parse OpenAI Message to extract text content and media URLs
      * Handles both simple string content and multi-modal content arrays
+     * Returns Triple of (text, imageUrls, audioUrls)
      */
-    private fun parseOpenAIMessage(message: Message?): Pair<String, List<String>> {
-        if (message == null) return Pair("", emptyList())
+    private fun parseOpenAIMessage(message: Message?): Triple<String, List<String>, List<String>> {
+        if (message == null) return Triple("", emptyList(), emptyList())
 
-        val content = message.content ?: return Pair("", emptyList())
+        val text = message.content ?: ""
+        val imageUrls = message.imageUrls
+        val audioUrls = message.audioUrls
 
-        // For now, assume content is a plain string
-        // TODO: Support multi-modal content arrays if needed
-        return Pair(content, emptyList())
+        return Triple(text, imageUrls, audioUrls)
     }
 
     fun isReady(): Boolean = isInitialized && engine != null
