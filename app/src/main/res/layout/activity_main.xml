@@ -127,7 +127,8 @@
             android:textSize="10sp"
             android:fontFamily="monospace"
             android:textColor="#333333"
-            android:text="Ready..." />
+            android:text="Ready..."
+            android:textIsSelectable="true" />
     </ScrollView>
 
 </LinearLayout>
