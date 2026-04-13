@@ -17,6 +17,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.litert.gateway.R
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -174,7 +175,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateStatus() {
         if (isBound && llmService != null) {
-            statusText.text = "Running"
+            statusText.setText(R.string.status_running)
             statusText.setTextColor(0xFF4CAF50.toInt())
             urlText.text = llmService!!.getServerUrl()
             urlText.visibility = View.VISIBLE
@@ -182,7 +183,7 @@ class MainActivity : AppCompatActivity() {
             stopButton.isEnabled = true
             settingsButton.isEnabled = false
         } else {
-            statusText.text = "Stopped"
+            statusText.setText(R.string.status_stopped)
             statusText.setTextColor(0xFFFF5722.toInt())
             urlText.visibility = View.GONE
             startButton.isEnabled = true

@@ -15,14 +15,14 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Status: "
+            android:text="@string/status_prefix"
             android:textSize="12sp" />
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Stopped"
+            android:text="@string/status_stopped"
             android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -50,14 +50,14 @@
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
-            android:text="Start" />
+            android:text="@string/start_service" />
 
         <Button
             android:id="@+id/stopButton"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
-            android:text="Stop"
+            android:text="@string/stop_service"
             android:layout_marginStart="16dp" />
     </LinearLayout>
 
@@ -73,7 +73,7 @@
             android:id="@+id/helpButton"
             android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:text="帮助"
+            android:text="@string/help"
             android:textSize="12sp"
             android:paddingStart="12dp"
             android:paddingEnd="12dp" />
@@ -82,7 +82,7 @@
             android:id="@+id/settingsButton"
             android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:text="设置"
+            android:text="@string/settings"
             android:textSize="12sp"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"
@@ -97,17 +97,17 @@
             android:id="@+id/clearLogButton"
             android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:text="Clear"
+            android:text="@string/clear"
             android:textSize="12sp"
             android:paddingStart="12dp"
             android:paddingEnd="12dp" />
     </LinearLayout>
 
-    <!-- 日志区域 -->
+    <!-- Log -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Log:"
+        android:text="@string/log"
         android:textSize="12sp"
         android:textStyle="bold"
         android:layout_marginTop="8dp" />
@@ -127,7 +127,7 @@
             android:textSize="10sp"
             android:fontFamily="monospace"
             android:textColor="#333333"
-            android:text="Ready..."
+            android:text="@string/ready"
             android:textIsSelectable="true" />
     </ScrollView>
 

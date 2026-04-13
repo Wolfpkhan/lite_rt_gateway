@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LiteRT Gateway</string>
+    <string name="status_prefix">状态: </string>
+    <string name="status_stopped">已停止</string>
+    <string name="status_running">运行中</string>
+    <string name="start_service">启动</string>
+    <string name="stop_service">停止</string>
+    <string name="help">帮助</string>
+    <string name="settings">设置</string>
+    <string name="clear">清空</string>
+    <string name="log">日志:</string>
+    <string name="ready">就绪...</string>
+
+    <!-- Settings -->
+    <string name="service_config">服务配置</string>
+    <string name="port">端口:</string>
+    <string name="debug_log">调试日志</string>
+    <string name="inference_params">推理参数</string>
+    <string name="temperature">Temperature:</string>
+    <string name="max_tokens">Max Tokens:</string>
+    <string name="max_context_length">Max Context Length:</string>
+    <string name="context_window">Context:</string>
+    <string name="model_config">模型配置</string>
+    <string name="select_folder">选择目录</string>
+    <string name="default_folder">默认目录</string>
+    <string name="backend_config">后端配置</string>
+    <string name="text_backend">文本后端 (LLM):</string>
+    <string name="vision_backend">图像后端 (Vision):</string>
+    <string name="audio_backend">音频后端 (Audio):</string>
+    <string name="image_max_dimension">图片最大分辨率:</string>
+    <string name="language">语言:</string>
+    <string name="lang_chinese">中文</string>
+    <string name="lang_english">English</string>
+    <string name="save_config">保存配置</string>
+    <string name="config_saved">配置已保存</string>
+    <string name="default_dir">默认目录:</string>
+    <string name="not_set">未设置</string>
+    <string name="no_model">无模型</string>
+    <string name="range_2k_100m">范围: 2K - 100M</string>
+    <string name="range_4k_128k">范围: 4K - 128K (模型最大限制)</string>
+
+    <!-- Help -->
+    <string name="help_title">帮助</string>
+    <string name="usage">使用方法</string>
+    <string name="api_endpoint">API 端点</string>
+    <string name="model_dir_tip">模型目录说明</string>
+
+    <!-- Model folder dialog -->
+    <string name="select_model_folder">选择模型目录</string>
+    <string name="custom">自定义</string>
+    <string name="cancel">取消</string>
+    <string name="internal_storage">内部存储</string>
+    <string name="storage_permission_required">请先在设置中开启存储权限</string>
+    <string name="default_dir_format">默认目录: %s</string>
+    <string name="custom_dir_format">自定义: %s</string>
+    <string name="not_selected">未选择</string>
+</resources>

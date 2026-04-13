@@ -36,6 +36,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var visionBackendSpinner: Spinner
     private lateinit var audioBackendSpinner: Spinner
     private lateinit var imageMaxDimensionSpinner: Spinner
+    private lateinit var languageSpinner: Spinner
     private lateinit var saveButton: Button
 
     private var availableModels: List<File> = emptyList()
@@ -57,9 +58,14 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_settings)
 
         prefs = getSharedPreferences("LiteRTGateway", MODE_PRIVATE)
+
+        // Apply saved language BEFORE setContentView
+        val language = prefs.getInt("language", 0)
+        applyLanguage(language)
+
+        setContentView(R.layout.activity_settings)
 
         initViews()
         loadSettings()
@@ -84,6 +90,7 @@ class SettingsActivity : AppCompatActivity() {
         visionBackendSpinner = findViewById(R.id.visionBackendSpinner)
         audioBackendSpinner = findViewById(R.id.audioBackendSpinner)
         imageMaxDimensionSpinner = findViewById(R.id.imageMaxDimensionSpinner)
+        languageSpinner = findViewById(R.id.languageSpinner)
         saveButton = findViewById(R.id.saveButton)
 
         // Setup backend spinners
@@ -100,6 +107,12 @@ class SettingsActivity : AppCompatActivity() {
         val dimensionAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, dimensionOptions)
         dimensionAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         imageMaxDimensionSpinner.adapter = dimensionAdapter
+
+        // Setup language spinner
+        val languageOptions = listOf(getString(R.string.lang_chinese), getString(R.string.lang_english))
+        val languageAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, languageOptions)
+        languageAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        languageSpinner.adapter = languageAdapter
     }
 
     private fun loadSettings() {
@@ -132,6 +145,10 @@ class SettingsActivity : AppCompatActivity() {
         val imageMaxDim = prefs.getInt("image_max_dimension", 1024)
         imageMaxDimensionSpinner.setSelection(dimensionMap[imageMaxDim] ?: 1)
 
+        // Load language (default 0 = Chinese)
+        val language = prefs.getInt("language", 0)
+        languageSpinner.setSelection(language)
+
         updateModelPathText()
     }
 
@@ -140,13 +157,13 @@ class SettingsActivity : AppCompatActivity() {
         if (useDefault) {
             val defaultDir = getExternalFilesDir(null)?.let { File(it, "models") }
             modelPathText.text = if (defaultDir != null && defaultDir.exists()) {
-                "默认目录: ${defaultDir.absolutePath}"
+                getString(R.string.default_dir_format, defaultDir.absolutePath)
             } else {
-                "默认目录: 未设置"
+                getString(R.string.default_dir_format, getString(R.string.not_set))
             }
         } else {
             val uri = prefs.getString("model_folder_uri", null)
-            modelPathText.text = "自定义: ${uri?.substringAfterLast("/") ?: "未选择"}"
+            modelPathText.text = getString(R.string.custom_dir_format, uri?.substringAfterLast("/") ?: getString(R.string.not_selected))
         }
     }
 
@@ -154,7 +171,7 @@ class SettingsActivity : AppCompatActivity() {
         selectFolderButton.setOnClickListener {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 if (!Environment.isExternalStorageManager()) {
-                    Toast.makeText(this, "请先在设置中开启存储权限", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.storage_permission_required, Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
             }
@@ -162,7 +179,7 @@ class SettingsActivity : AppCompatActivity() {
             val paths = listOf(
                 "/storage/emulated/0/Download" to "Download",
                 "/storage/emulated/0/Documents" to "Documents",
-                "/storage/emulated/0" to "内部存储"
+                "/storage/emulated/0" to getString(R.string.internal_storage)
             ).filter { File(it.first).exists() }
 
             if (paths.isEmpty()) {
@@ -170,7 +187,7 @@ class SettingsActivity : AppCompatActivity() {
             } else {
                 val names = paths.map { it.second }.toTypedArray()
                 android.app.AlertDialog.Builder(this)
-                    .setTitle("选择模型目录")
+                    .setTitle(R.string.select_model_folder)
                     .setItems(names) { _, which ->
                         val selectedPath = paths[which].first
                         prefs.edit().putString("model_folder_uri", selectedPath).apply()
@@ -178,10 +195,10 @@ class SettingsActivity : AppCompatActivity() {
                         scanModels()
                         updateModelPathText()
                     }
-                    .setNegativeButton("自定义") { _, _ ->
+                    .setNegativeButton(R.string.custom) { _, _ ->
                         folderPicker.launch(null)
                     }
-                    .setNeutralButton("取消", null)
+                    .setNeutralButton(R.string.cancel, null)
                     .show()
             }
         }
@@ -271,13 +288,25 @@ class SettingsActivity : AppCompatActivity() {
         val dimensions = listOf(512, 1024, 1536, 2048, 3072)
         prefs.edit().putInt("image_max_dimension", dimensions[imageMaxDimensionSpinner.selectedItemPosition]).apply()
 
-        // Save selected model
-        if (selectedModelPath.isNotEmpty()) {
-            prefs.edit().putString("last_model_path", selectedModelPath).apply()
-        }
+        // Save language
+        prefs.edit().putInt("language", languageSpinner.selectedItemPosition).apply()
 
-        Toast.makeText(this, "配置已保存", Toast.LENGTH_SHORT).show()
+        // Apply language change
+        applyLanguage(languageSpinner.selectedItemPosition)
+
+        Toast.makeText(this, R.string.config_saved, Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun applyLanguage(languageIndex: Int) {
+        val locale = if (languageIndex == 0) {
+            java.util.Locale.SIMPLIFIED_CHINESE
+        } else {
+            java.util.Locale.ENGLISH
+        }
+        val appLocale = androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+            androidx.core.os.LocaleListCompat.forLanguageTags(locale.toLanguageTag())
+        )
     }
 
     private fun formatTokens(tokens: Int): String {
@@ -343,7 +372,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // Update spinner
         val modelNames = if (availableModels.isEmpty()) {
-            listOf("无模型")
+            listOf(getString(R.string.no_model))
         } else {
             availableModels.map { it.name }
         }

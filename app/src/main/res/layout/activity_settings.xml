@@ -12,12 +12,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="服务配置"
+            android:text="@string/service_config"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
-        <!-- 端口配置 -->
+        <!-- Port -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -28,7 +28,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="端口:"
+                android:text="@string/port"
                 android:textSize="14sp" />
 
             <EditText
@@ -43,12 +43,12 @@
                 android:background="@android:drawable/edit_text" />
         </LinearLayout>
 
-        <!-- 调试日志 -->
+        <!-- Debug -->
         <CheckBox
             android:id="@+id/debugCheckBox"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="调试日志"
+            android:text="@string/debug_log"
             android:textSize="14sp"
             android:layout_marginBottom="16dp" />
 
@@ -61,7 +61,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="推理参数"
+            android:text="@string/inference_params"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
@@ -77,7 +77,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Temperature:"
+                android:text="@string/temperature"
                 android:textSize="14sp" />
 
             <TextView
@@ -109,7 +109,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Max Tokens:"
+                android:text="@string/max_tokens"
                 android:textSize="14sp" />
 
             <TextView
@@ -133,7 +133,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="范围: 2K - 100M"
+            android:text="@string/range_2k_100m"
             android:textSize="12sp"
             android:textColor="#888888"
             android:layout_marginBottom="16dp" />
@@ -148,7 +148,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Max Context Length (Context Window):"
+            android:text="@string/max_context_length"
             android:textSize="14sp"
             android:layout_marginBottom="8dp" />
 
@@ -162,7 +162,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Context:"
+                android:text="@string/context_window"
                 android:textSize="14sp" />
 
             <TextView
@@ -186,7 +186,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="范围: 4K - 128K (模型最大限制)"
+            android:text="@string/range_4k_128k"
             android:textSize="12sp"
             android:textColor="#888888"
             android:layout_marginBottom="16dp" />
@@ -200,12 +200,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="模型配置"
+            android:text="@string/model_config"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
-        <!-- 模型目录 -->
+        <!-- Model folder -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -217,7 +217,7 @@
                 android:id="@+id/selectFolderButton"
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
-                android:text="选择目录"
+                android:text="@string/select_folder"
                 android:textSize="12sp" />
 
             <View
@@ -228,7 +228,7 @@
                 android:id="@+id/defaultFolderButton"
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
-                android:text="默认目录"
+                android:text="@string/default_folder"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -242,7 +242,7 @@
             android:maxLines="2"
             android:ellipsize="middle" />
 
-        <!-- 模型列表 -->
+        <!-- Model list -->
         <Spinner
             android:id="@+id/modelSpinner"
             android:layout_width="match_parent"
@@ -259,16 +259,16 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="后端配置"
+            android:text="@string/backend_config"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
-        <!-- 文本/对话后端 -->
+        <!-- Text backend -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="文本后端 (LLM):"
+            android:text="@string/text_backend"
             android:textSize="14sp"
             android:layout_marginBottom="4dp" />
 
@@ -279,11 +279,11 @@
             android:background="@android:drawable/btn_dropdown"
             android:layout_marginBottom="12dp" />
 
-        <!-- 图像后端 -->
+        <!-- Vision backend -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="图像后端 (Vision):"
+            android:text="@string/vision_backend"
             android:textSize="14sp"
             android:layout_marginBottom="4dp" />
 
@@ -294,11 +294,11 @@
             android:background="@android:drawable/btn_dropdown"
             android:layout_marginBottom="12dp" />
 
-        <!-- 音频后端 -->
+        <!-- Audio backend -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="音频后端 (Audio):"
+            android:text="@string/audio_backend"
             android:textSize="14sp"
             android:layout_marginBottom="4dp" />
 
@@ -309,11 +309,11 @@
             android:background="@android:drawable/btn_dropdown"
             android:layout_marginBottom="16dp" />
 
-        <!-- 图片最大分辨率 -->
+        <!-- Image max dimension -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="图片最大分辨率:"
+            android:text="@string/image_max_dimension"
             android:textSize="14sp"
             android:layout_marginBottom="4dp" />
 
@@ -322,14 +322,29 @@
             android:layout_width="match_parent"
             android:layout_height="40dp"
             android:background="@android:drawable/btn_dropdown"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Language -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/language"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <Spinner
+            android:id="@+id/languageSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@android:drawable/btn_dropdown"
             android:layout_marginBottom="24dp" />
 
-        <!-- 保存按钮 -->
+        <!-- Save -->
         <Button
             android:id="@+id/saveButton"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:text="保存配置"
+            android:text="@string/save_config"
             android:textSize="16sp" />
 
     </LinearLayout>
