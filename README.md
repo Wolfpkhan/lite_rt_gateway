@@ -7,6 +7,7 @@ Android app that hosts an OpenAI-compatible API on your device, turning your pho
 ## Features
 
 - **OpenAI Compatible API**: Endpoints for `/v1/chat/completions`, `/v1/models`, `/health`
+- **Google Gemma 4 Support**: Full support for Google Gemma 4 series models including text and multimodal variants
 - **Multi-modal Support**: Text, image, and audio input
 - **Streaming Output**: SSE streaming responses
 - **Configurable Backends**: CPU/GPU/NPU acceleration for text, image, and audio
@@ -18,6 +19,17 @@ Android app that hosts an OpenAI-compatible API on your device, turning your pho
 - **Inference Engine**: LiteRT-LM (Google AI Edge)
 - **HTTP Server**: Ktor Netty
 - **Platform**: Android (API 26+)
+
+## Supported Models
+
+This app supports models converted to the `.litertlm` format using Google's AI Edge tools. Currently tested with:
+
+- **Google Gemma 4 Series**
+  - Gemma 4 (text-only variants)
+  - Gemma 4 with vision capabilities
+  - Gemma 4 multimodal variants (text, image, audio)
+
+To convert models to `.litertlm` format, use the [AI Edge Torch](https://ai.google.dev/edge/ai-edge-torch) conversion tools.
 
 ## API Endpoints
 
@@ -108,7 +120,9 @@ Build artifacts available on Actions and Release pages.
 
 1. **Install Model**: Place `.litertlm` model file in app's private directory:
    ```bash
-   adb push your_model.litertlm /storage/emulated/0/Android/data/com.litert.gateway/files/models/
+   # Example for Gemma 4 models
+   adb push gemma-4-2b-it.litertlm /storage/emulated/0/Android/data/com.litert.gateway/files/models/
+   adb push gemma-4-vision-2b.litertlm /storage/emulated/0/Android/data/com.litert.gateway/files/models/
    ```
 
 2. **Start App**: Tap "Start" button to start the service

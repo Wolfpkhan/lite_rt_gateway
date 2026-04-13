@@ -7,6 +7,7 @@ Android 应用，在设备上 Host OpenAI 兼容 API，让手机成为本地 LLM
 ## 功能特性
 
 - **OpenAI 兼容 API**：提供 `/v1/chat/completions`、`/v1/models`、`/health` 端点
+- **Google Gemma 4 支持**：完整支持 Google Gemma 4 系列模型，包括文本和多模态变体
 - **多模态支持**：支持文本、图像、音频输入
 - **流式输出**：支持 SSE 流式响应
 - **可配置后端**：文本、图像、音频分别可选择 CPU/GPU/NPU 加速
@@ -18,6 +19,17 @@ Android 应用，在设备上 Host OpenAI 兼容 API，让手机成为本地 LLM
 - **推理引擎**：LiteRT-LM (Google AI Edge)
 - **HTTP 服务器**：Ktor Netty
 - **平台**：Android (API 26+)
+
+## 支持的模型
+
+本应用支持使用 Google AI Edge 工具转换为 `.litertlm` 格式的模型。目前已测试：
+
+- **Google Gemma 4 系列**
+  - Gemma 4（纯文本变体）
+  - Gemma 4 视觉版本
+  - Gemma 4 多模态变体（文本、图像、音频）
+
+将模型转换为 `.litertlm` 格式，请使用 [AI Edge Torch](https://ai.google.dev/edge/ai-edge-torch) 转换工具。
 
 ## API 端点
 
@@ -108,7 +120,9 @@ git push --tags
 
 1. **安装模型**：将 `.litertlm` 模型文件放入应用私有目录：
    ```bash
-   adb push your_model.litertlm /storage/emulated/0/Android/data/com.litert.gateway/files/models/
+   # Gemma 4 模型示例
+   adb push gemma-4-2b-it.litertlm /storage/emulated/0/Android/data/com.litert.gateway/files/models/
+   adb push gemma-4-vision-2b.litertlm /storage/emulated/0/Android/data/com.litert.gateway/files/models/
    ```
 
 2. **启动应用**：点击 "启动" 按钮启动服务
