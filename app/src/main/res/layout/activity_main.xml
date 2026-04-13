@@ -15,39 +15,8 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="LiteRT Gateway"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <Button
-            android:id="@+id/helpButton"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:text="帮助"
-            android:textSize="12sp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp" />
-
-        <Button
-            android:id="@+id/settingsButton"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:text="设置"
-            android:textSize="12sp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:text="Status: "
-            android:textSize="12sp"
-            android:layout_marginStart="8dp" />
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/statusText"
@@ -92,13 +61,37 @@
             android:layout_marginStart="16dp" />
     </LinearLayout>
 
-    <!-- 清空按钮 -->
+    <!-- 按钮区域 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="end"
+        android:gravity="start"
         android:layout_marginTop="4dp">
+
+        <Button
+            android:id="@+id/helpButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="帮助"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
+
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="设置"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:layout_marginStart="8dp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
         <Button
             android:id="@+id/clearLogButton"
