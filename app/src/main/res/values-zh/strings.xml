@@ -40,12 +40,6 @@
     <string name="range_2k_100m">范围: 2K - 100M</string>
     <string name="range_4k_128k">范围: 4K - 128K (模型最大限制)</string>
 
-    <!-- Help -->
-    <string name="help_title">帮助</string>
-    <string name="usage">使用方法</string>
-    <string name="api_endpoint">API 端点</string>
-    <string name="model_dir_tip">模型目录说明</string>
-
     <!-- Model folder dialog -->
     <string name="select_model_folder">选择模型目录</string>
     <string name="custom">自定义</string>
@@ -55,4 +49,16 @@
     <string name="default_dir_format">默认目录: %s</string>
     <string name="custom_dir_format">自定义: %s</string>
     <string name="not_selected">未选择</string>
+
+    <!-- Help -->
+    <string name="help_title">API 端点</string>
+    <string name="help_text_chat">文本聊天:</string>
+    <string name="help_text_stream">流式输出:</string>
+    <string name="help_text_multiturn">多轮对话:</string>
+    <string name="help_text_image">图像识别:</string>
+    <string name="help_text_audio">音频识别:</string>
+    <string name="help_connection_title">连接说明</string>
+    <string name="help_connection_usb">• USB调试: adb forward tcp:12345 tcp:PORT\n  然后访问 http://localhost:12345\n• WiFi局域网: 确保手机和电脑在同一网络\n• 服务地址显示在主界面URL处</string>
+    <string name="help_endpoint_desc">• POST /v1/chat/completions - 聊天补全\n• GET /v1/models - 获取可用模型\n• GET /health - 健康检查</string>
+    <string name="help_usage_examples">使用示例</string>
 </resources>

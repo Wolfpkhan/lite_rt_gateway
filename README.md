@@ -1,33 +1,35 @@
 # LiteRT Gateway
 
-Android 应用，在设备上 Host OpenAI 兼容 API，让手机成为本地 LLM API 服务器。
+[中文版](README_zh.md) | English
 
-## 功能特性
+Android app that hosts an OpenAI-compatible API on your device, turning your phone into a local LLM API server.
 
-- **OpenAI 兼容 API**：提供 `/v1/chat/completions`、`/v1/models`、`/health` 端点
-- **多模态支持**：支持文本、图像、音频输入
-- **流式输出**：支持 SSE 流式响应
-- **可配置后端**：文本、图像、音频分别可选择 CPU/GPU/NPU 加速
-- **Foreground Service**：后台持续运行
-- **可配置端口**：默认 8080，可在设置中修改
+## Features
 
-## 技术栈
+- **OpenAI Compatible API**: Endpoints for `/v1/chat/completions`, `/v1/models`, `/health`
+- **Multi-modal Support**: Text, image, and audio input
+- **Streaming Output**: SSE streaming responses
+- **Configurable Backends**: CPU/GPU/NPU acceleration for text, image, and audio
+- **Foreground Service**: Runs continuously in background
+- **Configurable Port**: Default 8080, changeable in settings
 
-- **推理引擎**：LiteRT-LM (Google AI Edge)
-- **HTTP 服务器**：Ktor Netty
-- **平台**：Android (API 26+)
+## Tech Stack
 
-## API 端点
+- **Inference Engine**: LiteRT-LM (Google AI Edge)
+- **HTTP Server**: Ktor Netty
+- **Platform**: Android (API 26+)
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/v1/chat/completions` | POST | 聊天补全（支持流式） |
-| `/v1/models` | GET | 获取可用模型 |
-| `/health` | GET | 健康检查 |
+## API Endpoints
 
-## 请求示例
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/chat/completions` | POST | Chat completion (streaming supported) |
+| `/v1/models` | GET | List available models |
+| `/health` | GET | Health check |
 
-### 文本聊天
+## Request Examples
+
+### Text Chat
 
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
@@ -35,7 +37,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   -d '{"messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-### 流式输出
+### Streaming
 
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
@@ -43,7 +45,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   -d '{"messages":[{"role":"user","content":"Count to 5"}],"stream":true}'
 ```
 
-### 图像识别
+### Image Recognition
 
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
@@ -52,14 +54,14 @@ curl -X POST http://localhost:8080/v1/chat/completions \
     "messages": [{
       "role": "user",
       "content": [
-        {"type": "text", "text": "描述这张图片"},
+        {"type": "text", "text": "Describe this image"},
         {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
       ]
     }]
   }'
 ```
 
-### 音频识别
+### Audio Recognition
 
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
@@ -68,82 +70,82 @@ curl -X POST http://localhost:8080/v1/chat/completions \
     "messages": [{
       "role": "user",
       "content": [
-        {"type": "text", "text": "描述这段音频"},
+        {"type": "text", "text": "Describe this audio"},
         {"type": "audio", "audio": {"url": "data:audio/mp3;base64,..."}}
       ]
     }]
   }'
 ```
 
-## 安装
+## Installation
 
-### 从源码构建
+### Build from Source
 
 ```bash
-# 克隆仓库
+# Clone repo
 git clone https://github.com/Wolfpkhan/lite_rt_gateway.git
 cd lite_rt_gateway
 
-# 构建 debug APK
+# Build debug APK
 ./gradlew assembleDebug
 
-# 安装
+# Install
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### GitHub Actions 自动构建
+### GitHub Actions Auto Build
 
-推送 tag 自动触发构建和 Release：
+Push a tag to trigger build and release:
 
 ```bash
 git tag v1.0.0
 git push --tags
 ```
 
-构建产物会在 Actions 和 Release 页面提供下载。
+Build artifacts available on Actions and Release pages.
 
-## 使用方法
+## Usage
 
-1. **安装模型**：将 `.litertlm` 模型文件放入应用私有目录：
+1. **Install Model**: Place `.litertlm` model file in app's private directory:
    ```bash
    adb push your_model.litertlm /storage/emulated/0/Android/data/com.litert.gateway/files/models/
    ```
 
-2. **启动应用**：点击 "Start" 按钮启动服务
+2. **Start App**: Tap "Start" button to start the service
 
-3. **配置**：点击 "设置" 按钮可配置：
-   - 端口号
-   - 调试日志
-   - 模型目录
-   - 文本/图像/音频后端 (CPU/GPU/NPU)
+3. **Configure**: Tap "Settings" to configure:
+   - Port number
+   - Debug log
+   - Model directory
+   - Text/Image/Audio backend (CPU/GPU/NPU)
 
-4. **测试 API**：
+4. **Test API**:
    ```bash
-   # 端口转发（如通过 USB 调试）
+   # Port forward (USB debugging)
    adb forward tcp:12345 tcp:8080
 
-   # 测试
+   # Test
    curl http://localhost:12345/health
    ```
 
-## 权限说明
+## Permissions
 
-- `INTERNET`：网络访问
-- `FOREGROUND_SERVICE`：后台服务
-- `MANAGE_EXTERNAL_STORAGE`：访问外部存储（可选，用于选择外部目录的模型）
-- `POST_NOTIFICATIONS`：通知权限（Android 13+）
+- `INTERNET`: Network access
+- `FOREGROUND_SERVICE`: Background service
+- `MANAGE_EXTERNAL_STORAGE`: External storage access (optional, for selecting external model directory)
+- `POST_NOTIFICATIONS`: Notification permission (Android 13+)
 
-## 项目结构
+## Project Structure
 
 ```
 app/src/main/java/com/litert/gateway/
-├── MainActivity.kt      # 主界面
-├── SettingsActivity.kt  # 设置界面
+├── MainActivity.kt      # Main UI
+├── SettingsActivity.kt  # Settings UI
 ├── LlmService.kt       # Foreground Service
-├── LlmEngine.kt         # LiteRT-LM 封装
+├── LlmEngine.kt         # LiteRT-LM wrapper
 └── openai/
-    ├── OpenAiModels.kt # 数据模型
-    └── OpenAiRoute.kt   # Ktor 路由
+    ├── OpenAiModels.kt # Data models
+    └── OpenAiRoute.kt   # Ktor routes
 ```
 
 ## License

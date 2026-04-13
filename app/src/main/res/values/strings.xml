@@ -40,12 +40,6 @@
     <string name="range_2k_100m">Range: 2K - 100M</string>
     <string name="range_4k_128k">Range: 4K - 128K (Model limit)</string>
 
-    <!-- Help -->
-    <string name="help_title">Help</string>
-    <string name="usage">Usage</string>
-    <string name="api_endpoint">API Endpoint</string>
-    <string name="model_dir_tip">Model Directory Tip</string>
-
     <!-- Model folder dialog -->
     <string name="select_model_folder">Select Model Folder</string>
     <string name="custom">Custom</string>
@@ -55,4 +49,16 @@
     <string name="default_dir_format">Default: %s</string>
     <string name="custom_dir_format">Custom: %s</string>
     <string name="not_selected">Not selected</string>
+
+    <!-- Help -->
+    <string name="help_title">API Endpoints</string>
+    <string name="help_text_chat">Text Chat:</string>
+    <string name="help_text_stream">Streaming:</string>
+    <string name="help_text_multiturn">Multi-turn:</string>
+    <string name="help_text_image">Image Recognition:</string>
+    <string name="help_text_audio">Audio Recognition:</string>
+    <string name="help_connection_title">Connection Guide</string>
+    <string name="help_connection_usb">• USB Debug: adb forward tcp:12345 tcp:PORT\n  Then access http://localhost:12345\n• WiFi LAN: Ensure phone and PC on same network\n• Service URL shown on main interface</string>
+    <string name="help_endpoint_desc">• POST /v1/chat/completions - Chat completion\n• GET /v1/models - List available models\n• GET /health - Health check</string>
+    <string name="help_usage_examples">Usage Examples</string>
 </resources>
